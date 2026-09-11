@@ -11,7 +11,7 @@ from docx.shared import Inches, Pt, RGBColor
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "使用教学.docx"
-SCREENSHOT = ROOT / "docs" / "validation" / "v1.35" / "app-main.png"
+SCREENSHOT = ROOT / "docs" / "validation" / "v1.36" / "app-main.png"
 if not SCREENSHOT.exists():
     SCREENSHOT = ROOT / "docs" / "validation" / "v1.34" / "app-main.png"
 ACCENT = "3D9B67"
@@ -143,7 +143,7 @@ remove_paragraph_border(title)
 set_font(title.add_run("学习通课程视频播放助手使用教学"), size=28, bold=True)
 subtitle = doc.add_paragraph()
 subtitle.paragraph_format.space_after = Pt(16)
-set_font(subtitle.add_run("适用于 v1.35 Windows 便携版"), size=11.5, color="4E6C5C")
+set_font(subtitle.add_run("适用于 v1.36 Windows 便携版"), size=11.5, color="4E6C5C")
 
 add_body(doc, "这份教学面向第一次使用的同学。程序帮助减少重复点击：识别课程中的真实视频，按同一章节内的视频顺序继续播放，再查找后续未完成视频。课程是否完成仍以学习通页面的实际记录为准。")
 
@@ -172,6 +172,7 @@ doc.add_page_break()
 doc.add_heading("主要按钮", level=1)
 buttons = [
     ("开始", "识别当前课程和待播放视频，并尝试开始播放。"),
+    ("打开未完成章节", "刷新任务点后打开首个未完成或已有真实视频证据的待核验章节；按钮会显示查找状态。"),
     ("暂停辅助", "保留当前页面，但暂时不再自动查找或切换下一视频。"),
     ("全屏观看", "按 F11 让学习通网页铺满窗口；点顶部“退出全屏”，或按 Esc、F11 返回。"),
     ("刷新网页", "重新载入当前学习通页面。"),
@@ -214,6 +215,7 @@ doc.add_heading("遇到问题", level=1)
 add_steps(doc, [
     "左侧课程为空时，先进入学习通课程页并点“刷新课程”；页面仍在加载时程序会短暂重试。",
     "先点一次“开始”，再观察右侧的“当前视频”和“下一视频”。",
+    "点“打开未完成章节”后留意按钮和顶部提示；如果没有识别到真实视频，先在网页目录打开目标章节再点“开始”。",
     "仍然无法继续时，打开“日志与反馈”查看记录。",
     "点“导出反馈包”，并说明课程页面、发生步骤和当时的视频位置。",
     "公开发送反馈包前，检查并删除课程名称、学校名称、页面地址参数等不便公开的信息。",
@@ -224,7 +226,7 @@ add_body(doc, "本程序只是网页播放辅助工具，不绕过学习通的�
 add_body(doc, "本作品与超星学习通官方不存在隶属、授权或合作关系。使用时请遵守学校、课程和平台规则。网页结构、网络状态和平台规则可能变化，程序不能保证学习通最终记录结果；重要课程请在学习通页面人工核对进度。")
 
 doc.core_properties.title = "学习通课程视频播放助手使用教学"
-doc.core_properties.subject = "学习通课程视频播放助手 v1.35 使用说明"
+doc.core_properties.subject = "学习通课程视频播放助手 v1.36 使用说明"
 doc.core_properties.author = "ChaoxingLearningAssistant"
 doc.save(OUTPUT)
 print(OUTPUT)

@@ -458,7 +458,9 @@ public sealed class ChaoxingAdapter : IDisposable
   const mediaIdOf = (v, block) => [
     attr(v,'data-objectid'), attr(v,'data-object-id'), attr(v,'data-id'), attr(v,'data-mid'),
     attr(block,'data-objectid'), attr(block,'data-object-id'), attr(block,'data-id'), attr(block,'data-mid'),
-    attr(block,'data-attachment'), attr(block,'data-attach-id')
+    attr(block,'data-attachment'), attr(block,'data-attach-id'),
+    attr(block?.querySelector?.('iframe'),'objectid'), attr(block?.querySelector?.('iframe'),'data-objectid'),
+    attr(block?.querySelector?.('iframe'),'mid')
   ].map(norm).find(Boolean) || '';
   const completion = el => {
     const text = norm((el?.innerText || el?.textContent || '') + ' ' + (el?.outerHTML || '').slice(0,4200));
@@ -469,13 +471,22 @@ public sealed class ChaoxingAdapter : IDisposable
     return null;
   };
   const titleOf = (v, block) => {
+    const frame = block?.querySelector?.('iframe');
     const node = block?.querySelector?.('.video-name,.video-title,.task-title,.title,.ans-job-title,.ans-attach-title,[data-title],[data-name],[title]');
     const candidates = [
       attr(v,'title'), attr(v,'aria-label'), attr(v,'data-title'), attr(v,'data-name'),
       attr(block,'data-title'), attr(block,'data-name'), attr(block,'title'),
+      attr(frame,'data-title'), attr(frame,'data-name'), attr(frame,'title'),
       node?.getAttribute?.('data-title'), node?.getAttribute?.('data-name'), node?.getAttribute?.('title'),
       node?.innerText
     ];
+    const frameData = attr(frame,'data');
+    if (frameData) {
+      try {
+        const metadata = JSON.parse(frameData);
+        candidates.unshift(metadata?.property?.name, metadata?.property?.title, metadata?.name, metadata?.title);
+      } catch {}
+    }
     for (const candidate of candidates) {
       const title = cleanTitle(candidate || '');
       if (title && title.length >= 2) return title;
@@ -511,14 +522,18 @@ public sealed class ChaoxingAdapter : IDisposable
   let blockOrder = videos.length;
   for (const block of blocks) {
     if (block.querySelector?.('video')) continue;
-    const iframe = block.querySelector?.('iframe[src]');
-    const taskLabel = norm((block.innerText || block.textContent || '') + ' ' + attr(block,'title'));
-    if (/章节测验|测试题|测验|作业|签到|考试|homework|exam/i.test(taskLabel)) continue;
-    const looksVideo = !!iframe && /video|play|objectid|media/i.test((iframe.src || '') + ' ' + norm(block.className || '')) ||
+    const iframe = block.querySelector?.('iframe');
+    const frameEvidence = norm([
+      iframe?.src, attr(iframe,'src'), attr(iframe,'_src'), attr(iframe,'class'), attr(iframe,'title'),
+      attr(iframe,'data-type'), attr(iframe,'type'), attr(iframe,'module'), attr(iframe,'data')
+    ].filter(Boolean).join(' '));
+    const taskLabel = norm((block.innerText || block.textContent || '') + ' ' + attr(block,'title') + ' ' + frameEvidence);
+    if (/章节测验|测试题|测验|作业|签到|考试|homework|exam|workid|worktype|module["']?\s*[:=]\s*["']?work/i.test(taskLabel)) continue;
+    const looksVideo = !!iframe && /video|richvideo|insertvideo|shipin|module["']?\s*[:=]\s*["']?video/i.test(frameEvidence + ' ' + norm(block.className || '')) ||
                        /视频|video|shipin/i.test(norm(attr(block,'title')) + ' ' + norm(block.className || ''));
     if (!looksVideo) continue;
     const mediaId = mediaIdOf(null, block);
-    const source = norm(iframe?.src || '');
+    const source = norm(iframe?.src || attr(iframe,'src') || attr(iframe,'_src'));
     const chapterId = chapterIdFromNode(block) || chapterIdFromUrl(location.href);
     const taskKey = mediaId ? `media:${mediaId}|src:${source}|doc:${location.href}|block:${blockOrder}` : source ? `frame:${source}` : `doc:${location.href}|block:${blockOrder}`;
     if (seen.has(taskKey)) continue;
@@ -1067,9 +1082,16 @@ public sealed class ChaoxingAdapter : IDisposable
     return null;
   };
   const isVideoTask = el => {
-    const label = norm((el?.innerText || el?.textContent || '') + ' ' + (el?.getAttribute?.('title') || ''));
-    if (/章节测验|测试题|测验|作业|签到|考试|homework|exam/i.test(label)) return false;
-    return !!el?.querySelector?.('video,iframe[src*="video" i],iframe[src*="play" i],[data-type*="video"],[class*="ans-video"],[class*="video"]') ||
+    const frame = el?.querySelector?.('iframe');
+    const frameEvidence = norm([
+      frame?.src, frame?.getAttribute?.('src'), frame?.getAttribute?.('_src'), frame?.getAttribute?.('class'),
+      frame?.getAttribute?.('title'), frame?.getAttribute?.('data-type'), frame?.getAttribute?.('type'),
+      frame?.getAttribute?.('module'), frame?.getAttribute?.('data')
+    ].filter(Boolean).join(' '));
+    const label = norm((el?.innerText || el?.textContent || '') + ' ' + (el?.getAttribute?.('title') || '') + ' ' + frameEvidence);
+    if (/章节测验|测试题|测验|作业|签到|考试|homework|exam|workid|worktype|module["']?\s*[:=]\s*["']?work/i.test(label)) return false;
+    return !!el?.querySelector?.('video,[data-type*="video"],[class*="ans-video"],[class*="video"]') ||
+           (!!frame && /video|richvideo|insertvideo|shipin|module["']?\s*[:=]\s*["']?video/i.test(frameEvidence)) ||
            /视频|video|shipin/i.test(norm(el?.getAttribute?.('title') || '') + ' ' + norm(el?.className || ''));
   };
   const blocks = Array.from(new Set(Array.from(document.querySelectorAll(
@@ -1081,12 +1103,12 @@ public sealed class ChaoxingAdapter : IDisposable
   if (!target) return false;
   try { target.scrollIntoView?.({ block:'center', behavior:'auto' }); } catch {}
   const clickTarget = target.querySelector?.(
-    '.ans-job-icon,[role="tab"],button,a[href],[onclick],.catalog_title,.task-title,.title'
-  );
+    '[role="tab"],button,a[href],[onclick],.catalog_title,.task-title,.title,iframe,.ans-job-icon'
+  ) || target;
   if (clickTarget && !clickTarget.matches?.('video')) {
-    try { clickTarget.click?.(); } catch {}
+    try { clickTarget.click?.(); return true; } catch {}
   }
-  return true;
+  return false;
 })()
 """;
         var results = await ExecuteAcrossDocumentsAsync<bool>(script, x => x);
@@ -1368,6 +1390,20 @@ public sealed class ChaoxingAdapter : IDisposable
   const blocks = Array.from(new Set(Array.from(document.querySelectorAll(
     '.ans-attach-ct,.ans-job,.ans-videoquiz,.task-point,.taskPoint,[data-type*="video"],[class*="ans-video"]'
   ))));
+  const frameEvidenceOf = block => {
+    const frame = block?.querySelector?.('iframe');
+    return norm([
+      frame?.src, attr(frame,'src'), attr(frame,'_src'), attr(frame,'class'), attr(frame,'title'),
+      attr(frame,'data-type'), attr(frame,'type'), attr(frame,'module'), attr(frame,'data')
+    ].filter(Boolean).join(' '));
+  };
+  const isVideoBlock = block => {
+    const evidence = norm((block?.innerText || block?.textContent || '') + ' ' + attr(block,'title') + ' ' +
+                          norm(block?.className || '') + ' ' + frameEvidenceOf(block));
+    if (/章节测验|测试题|测验|作业|签到|考试|homework|exam|workid|worktype|module["']?\s*[:=]\s*["']?work/i.test(evidence)) return false;
+    return !!block?.querySelector?.('video,[data-type*="video"],[class*="ans-video"],[class*="video"]') ||
+           /视频|video|richvideo|insertvideo|shipin|module["']?\s*[:=]\s*["']?video/i.test(evidence);
+  };
   if (!videos.length && !blocks.length) return 0;
 
   // 当前视频可能在子 iframe，而任务顺序只存在于父页面。调用方能从合并后的扫描结果
@@ -1401,19 +1437,21 @@ public sealed class ChaoxingAdapter : IDisposable
     const targetBlockMediaId = block => [
       attr(block,'data-objectid'), attr(block,'data-object-id'), attr(block,'data-id'), attr(block,'data-mid'),
       attr(block,'data-attachment'), attr(block,'data-attach-id'),
+      attr(block?.querySelector?.('iframe'),'objectid'), attr(block?.querySelector?.('iframe'),'data-objectid'),
+      attr(block?.querySelector?.('iframe'),'mid'),
       attr(block?.querySelector?.('[data-objectid],[data-object-id],[data-id],[data-mid]'),'data-objectid'),
       attr(block?.querySelector?.('[data-objectid],[data-object-id],[data-id],[data-mid]'),'data-object-id')
     ].map(norm).find(Boolean) || '';
     const exactBlock = blocks.find(block => {
-      const frame = block.querySelector?.('iframe[src]');
-      const frameSource = norm(frame?.src || attr(frame,'src'));
+      const frame = block.querySelector?.('iframe');
+      const frameSource = norm(frame?.src || attr(frame,'src') || attr(frame,'_src'));
       return (nextDocumentUrl && frameSource === norm(nextDocumentUrl)) ||
              (nextSource && frameSource === norm(nextSource)) ||
              (!strongTarget && nextMediaId && targetBlockMediaId(block) === nextMediaId);
     });
     if (exactBlock) {
       try { exactBlock.scrollIntoView?.({ block:'center', behavior:'auto' }); } catch {}
-      const clickTarget = exactBlock.querySelector?.('.ans-job-icon,[role="tab"],button,a[href],[onclick],.task-title,.title');
+      const clickTarget = exactBlock.querySelector?.('[role="tab"],button,a[href],[onclick],.task-title,.title,iframe,.ans-job-icon') || exactBlock;
       if (clickTarget) {
         try { clickTarget.click?.(); return 1; } catch {}
       }
@@ -1465,6 +1503,8 @@ public sealed class ChaoxingAdapter : IDisposable
   const blockMediaId = block => [
     attr(block,'data-objectid'), attr(block,'data-object-id'), attr(block,'data-id'), attr(block,'data-mid'),
     attr(block,'data-attachment'), attr(block,'data-attach-id'),
+    attr(block?.querySelector?.('iframe'),'objectid'), attr(block?.querySelector?.('iframe'),'data-objectid'),
+    attr(block?.querySelector?.('iframe'),'mid'),
     attr(block?.querySelector?.('[data-objectid],[data-object-id],[data-id],[data-mid]'),'data-objectid'),
     attr(block?.querySelector?.('[data-objectid],[data-object-id],[data-id],[data-mid]'),'data-object-id')
   ].map(norm).find(Boolean) || '';
@@ -1472,20 +1512,16 @@ public sealed class ChaoxingAdapter : IDisposable
     currentBlockIndex = blocks.findIndex(block => blockMediaId(block) === currentMediaId);
   if (currentBlockIndex < 0 && currentSource) {
     currentBlockIndex = blocks.findIndex(block => {
-      const media = block.querySelector?.('video,iframe[src]');
-      return norm(media?.currentSrc || media?.src || attr(media,'src')) === norm(currentSource);
+      const media = block.querySelector?.('video,iframe');
+      return norm(media?.currentSrc || media?.src || attr(media,'src') || attr(media,'_src')) === norm(currentSource);
     });
   }
   if (currentBlockIndex >= 0) {
     for (let i = currentBlockIndex + 1; i < blocks.length; i++) {
       const block = blocks[i];
-      const label = norm((block.innerText || block.textContent || '') + ' ' + attr(block,'title') + ' ' + norm(block.className || ''));
-      const hasVideoElement = !!block.querySelector?.('video,iframe[src*="video" i],iframe[src*="play" i],[data-type*="video"],[class*="video"]');
-      const looksAssessment = /测试|测验|题目|作业|签到|考试|quiz|homework|exam/i.test(label);
-      const looksVideo = hasVideoElement || (/视频|video|shipin/i.test(label) && !looksAssessment);
-      if (!looksVideo || completion(block) === true) continue;
+      if (!isVideoBlock(block) || completion(block) === true) continue;
       try { block.scrollIntoView?.({ block:'center', behavior:'auto' }); } catch {}
-      const clickTarget = block.querySelector?.('.ans-job-icon,[role="tab"],button,a[href],[onclick],.task-title,.title');
+      const clickTarget = block.querySelector?.('[role="tab"],button,a[href],[onclick],.task-title,.title,iframe,.ans-job-icon') || block;
       if (clickTarget) {
         try { clickTarget.click?.(); return 1; } catch {}
       }

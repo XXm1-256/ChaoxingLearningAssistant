@@ -1,4 +1,19 @@
-# TEST_REPORT - 当前版本 v1.35
+# TEST_REPORT - 当前版本 v1.36
+
+## v1.36 懒加载视频与未完成章节操作回归 2026 09 11
+
+- Adapter JavaScript：52/52 通过；新增 `src=index.html`、`ans-insertvideo-online`、JSON `data` 视频元数据与章节测验并存用例。
+- 新用例确认：只返回真实视频；读取 `objectid` 与视频标题；“打开未完成”只点击视频 iframe，测验 iframe 不被点击。
+- MSTest：36/36 通过。
+- WPF Release 编译：通过，0 警告、0 错误。
+- 静态检查：通过；覆盖懒加载 iframe 元数据、测验排除、按钮执行中状态与 v1.36 标识。
+- 完整构建：Restore、Release Build、MSTest、quick-run、self-contained win-x64 publish 全部通过；本机未安装 Inno Setup，因此安装器按既定规则跳过。
+- 本机界面截图：通过；v1.36 标题、课程空状态、刷新入口与三栏布局显示正常。
+- 使用教学 DOCX/PDF：通过；换入 v1.36 实拍截图并逐页检查 4 页，无裁切、重叠、乱码或缺字。
+- 用户版 ZIP：通过；顶层仅 DOCX、PDF、Markdown 教学与程序次级文件夹，解压后隐藏启动 6 秒保持运行。
+- 开发者版 ZIP：通过；顶层为单一 `ChaoxingLearningAssistant_v1.36` 目录，包含源码、累计档案和 MASTER。
+- MASTER：UTF-8 BOM 存在，无替换字符；内嵌载荷可恢复 149 个清单文件，逐文件哈希差异 0。
+- 真实学习通账号页面：尚待使用 v1.36 成品复测；自动测试不冒充真实平台验收。
 
 ## v1.35 课程列表与全屏退出回归 2026 09 11
 
@@ -753,4 +768,3 @@ Windows 首次验收建议：标题确认 v1.14 → 进入曾经左侧为空的�
 | XAML/XML / 静态回归 | PASS | 新增界面与版本结构可解析 |
 | 真实学习通课程列表 | NOT RUN | 需要宝贝已登录账号与学校课程页 |
 | 全屏按钮实机点击 | NOT RUN | 编译与事件连接通过，仍需成品窗口点击验收 |
-

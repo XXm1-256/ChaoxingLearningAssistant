@@ -1,8 +1,8 @@
-﻿<Window x:Class="ChaoxingLearningAssistant.Views.MainWindow"
+<Window x:Class="ChaoxingLearningAssistant.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
-        Title="学习通课程视频播放助手 v1.35"
+        Title="学习通课程视频播放助手 v1.36"
         Width="1420" Height="820"
         MinWidth="1220" MinHeight="760"
         WindowStartupLocation="CenterScreen"
@@ -234,7 +234,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="课程目录" Style="{StaticResource SectionTitleStyle}" VerticalAlignment="Center"/>
-                            <Button Grid.Column="1" Style="{StaticResource GhostButtonStyle}"
+                            <Button x:Name="JumpToUnfinishedButton" Grid.Column="1" Style="{StaticResource GhostButtonStyle}"
                                     Content="打开未完成章节" ToolTip="只打开平台明确标记为未完成的章节"
                                     Click="JumpToUnfinished_Click" VerticalAlignment="Center"/>
                         </Grid>

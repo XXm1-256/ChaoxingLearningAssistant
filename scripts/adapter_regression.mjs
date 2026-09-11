@@ -623,6 +623,60 @@ test('unknown video task remains a pending playback candidate', () => {
   assert.equal(focused, true);
 });
 
+test('lazy learning-page iframe metadata identifies a video and excludes a chapter quiz', () => {
+  const clicks = [];
+  const videoFrame = {
+    src: 'https://mooc1.chaoxing.com/ananas/modules/richvideo/index.html',
+    className: 'ans-attach-online ans-insertvideo-online',
+    getAttribute: key => ({
+      src: './index.html',
+      _src: '/ananas/modules/video/index.html?objectid=video-lazy',
+      class: 'ans-attach-online ans-insertvideo-online',
+      objectid: 'video-lazy',
+      data: '{"module":"video","property":{"name":"第二个课程视频","objectid":"video-lazy"}}',
+    }[key] || ''),
+    click: () => clicks.push('video'),
+    matches: () => false,
+  };
+  const quizFrame = {
+    src: 'https://mooc1.chaoxing.com/mooc-ans/api/work',
+    className: 'ans-attach-online',
+    getAttribute: key => ({
+      src: './index.html',
+      _src: '/mooc-ans/api/work?workId=quiz-one',
+      class: 'ans-attach-online',
+      data: '{"workid":"quiz-one","worktype":"workA","title":"章节测验"}',
+    }[key] || ''),
+    click: () => clicks.push('quiz'),
+    matches: () => false,
+  };
+  const makeBlock = (frame, label) => ({
+    innerText: label, textContent: label,
+    outerHTML: `<div class="ans-attach-ct">${label}</div>`, className: 'ans-attach-ct',
+    getAttribute: () => '', closest: () => null,
+    querySelector: selector => selector === 'iframe' || selector === 'iframe[src]' || selector.includes(',iframe') ? frame : null,
+    getBoundingClientRect: () => ({ width: 640, height: 360 }),
+    scrollIntoView: () => {},
+  });
+  const videoBlock = makeBlock(videoFrame, '任务点未完成');
+  const quizBlock = makeBlock(quizFrame, '章节测验未完成');
+  const context = {
+    document: { querySelectorAll: selector => selector === 'video' ? [] : [videoBlock, quizBlock] },
+    location: { href: 'https://mooc1.chaoxing.com/mycourse/studentstudy?courseId=course-a&chapterId=chapter-a' },
+    URL,
+  };
+
+  const scanned = vm.runInNewContext(script('ScanVideoTasksAsync'), context, { timeout: 1000 });
+  assert.equal(scanned.length, 1);
+  assert.equal(scanned[0].mediaId, 'video-lazy');
+  assert.equal(scanned[0].title, '第二个课程视频');
+  assert.equal(scanned[0].isCompleted, false);
+
+  const focused = vm.runInNewContext(script('FocusFirstUnfinishedVideoTaskAsync'), context, { timeout: 1000 });
+  assert.equal(focused, true);
+  assert.deepEqual(clicks, ['video']);
+});
+
 test('same-chapter sequential playback accepts an unknown-status next video without labeling it unfinished', () => {
   const calls = [];
   const makeBlock = status => ({

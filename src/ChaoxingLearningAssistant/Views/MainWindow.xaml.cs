@@ -2552,15 +2552,28 @@ public partial class MainWindow : Window
     {
         if (_adapter is null || _manualChapterOpenInProgress)
             return;
-        await RefreshChaptersInternalAsync(silent: false);
-        var chapter = FindFirstUnfinishedNavigationCandidate(_vm.Chapters);
-        if (chapter is null)
+        JumpToUnfinishedButton.IsEnabled = false;
+        JumpToUnfinishedButton.Content = "正在查找…";
+        ShowInAppNotice("查找未完成视频", "正在刷新任务点和章节状态。", false);
+        try
         {
-            NotifyUser("没有可靠的未完成标记", "目录当前没有给出可确认的“未完成”状态；程序不会把状态未知的章节冒充未完成。", false);
-            return;
+            await RefreshChaptersInternalAsync(silent: false);
+            var chapter = FindFirstUnfinishedNavigationCandidate(_vm.Chapters) ??
+                          FindFirstPendingNavigationCandidate(_vm.Chapters);
+            if (chapter is null)
+            {
+                NotifyUser("没有可打开的视频", "当前目录没有识别到未完成或待核验的视频任务；可先在网页目录打开目标章节，再点击开始。", false);
+                return;
+            }
+            ShowInAppNotice("正在打开章节", $"正在进入“{chapter.DisplayTitle}”并寻找首个待播视频。", false);
+            ChapterList.ScrollIntoView(chapter);
+            await OpenChapterFromLibraryAsync(chapter);
         }
-        ChapterList.ScrollIntoView(chapter);
-        await OpenChapterFromLibraryAsync(chapter);
+        finally
+        {
+            JumpToUnfinishedButton.Content = "打开未完成章节";
+            JumpToUnfinishedButton.IsEnabled = true;
+        }
     }
 
     private async Task OpenChapterFromLibraryAsync(ChapterItem chapter)
