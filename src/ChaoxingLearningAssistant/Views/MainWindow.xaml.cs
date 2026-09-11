@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Media;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using ChaoxingLearningAssistant.Chaoxing;
 using ChaoxingLearningAssistant.Models;
@@ -63,14 +64,15 @@ public partial class MainWindow : Window
     private string _loginRecoveryUrl = string.Empty;
     private bool _loginPageActive;
 
-    // v1.16 viewing mode keeps the normal Windows title bar and taskbar. F11 only
-    // hides secondary telemetry and slightly narrows the chapter pane; it is not fullscreen.
+    // F11 focus mode gives the embedded study page the entire client area.
     private bool _compactViewingMode;
     private Thickness _workspaceMarginBeforeCompact;
     private GridLength _leftColumnBeforeCompact;
+    private GridLength _leftSplitterBeforeCompact;
     private GridLength _rightSplitterBeforeCompact;
     private GridLength _telemetryColumnBeforeCompact;
     private Visibility _rightTelemetryVisibilityBeforeCompact;
+    private WindowState _windowStateBeforeCompact;
     private bool _focusUnfinishedAfterNavigation;
     private bool _manualChapterOpenInProgress;
     private ChapterItem? _requestedChapter;
@@ -91,6 +93,7 @@ public partial class MainWindow : Window
     private double _lastObservedPlayingDuration;
     private double _lastObservedPlayingRate = 1.0;
     private int _noticeVersion;
+    private Storyboard? _ambientMotion;
 
     public MainWindow()
     {
@@ -131,6 +134,11 @@ public partial class MainWindow : Window
     {
         try
         {
+            if (SystemParameters.ClientAreaAnimation)
+            {
+                _ambientMotion = (Storyboard)FindResource("AmbientMotion");
+                _ambientMotion.Begin(this, true);
+            }
             await InitializeWebViewAsync();
             StartPlayerMonitor();
             LoadCachedCourses();
@@ -201,6 +209,10 @@ public partial class MainWindow : Window
             options: environmentOptions);
 
         await Browser.EnsureCoreWebView2Async(environment);
+
+        // The learning site was designed for a full browser window. A modest default
+        // zoom keeps its navigation and task content visible inside the three-pane shell.
+        Browser.ZoomFactor = 0.80;
 
         Browser.CoreWebView2.Settings.IsStatusBarEnabled = false;
         Browser.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
@@ -561,8 +573,7 @@ public partial class MainWindow : Window
             if (!string.IsNullOrWhiteSpace(effectiveCourseTitle))
             {
                 CurrentCourseText.Text = effectiveCourseTitle;
-                if (_vm.SelectedCourse is not null && IsGenericCourseTitle(_vm.SelectedCourse.Title))
-                    _vm.SelectedCourse.Title = effectiveCourseTitle;
+                SyncCurrentCourseCard(effectiveCourseTitle);
                 if (IsGenericCourseTitle(App.Settings.Current.LastCourseTitle) ||
                     !string.Equals(App.Settings.Current.LastCourseTitle, effectiveCourseTitle, StringComparison.Ordinal))
                 {
@@ -765,6 +776,7 @@ public partial class MainWindow : Window
                 _vm.PlayerTimeText = "00:00 / 00:00";
                 _vm.ProgressPercent = 0;
                 _vm.CurrentVideoText = "-";
+                _vm.NextVideoText = "等待视频载入…";
                 SaveSession(snapshot);
                 return;
             }
@@ -820,6 +832,8 @@ public partial class MainWindow : Window
             _vm.ProgressPercent = snapshot.ProgressPercent;
             var currentVideoTask = ResolveVideoTaskFromPlayer(snapshot);
             _vm.CurrentVideoText = ResolvePlayerVideoTitle(snapshot, currentVideoTask);
+            _vm.NextVideoText = _pendingNextVideo?.DisplayTitle ??
+                NextVideoPreviewResolver.Resolve(_vm.Chapters, _vm.SelectedChapter, currentVideoTask);
 
             if (_pendingNextVideo is not null &&
                 IsConfirmedChapter(_pendingNextVideo) &&
@@ -1602,7 +1616,7 @@ public partial class MainWindow : Window
         }
 
         return items
-            .Where(x => x.IsNavigationCandidate && x.CompletionKnown && !x.IsCompleted)
+            .Where(x => x.IsNavigationCandidate && ChapterHasExplicitUnfinishedVideo(x))
             .FirstOrDefault();
     }
 
@@ -1674,7 +1688,32 @@ public partial class MainWindow : Window
                title.Equals("课程学习", StringComparison.OrdinalIgnoreCase) ||
                title.Equals("章节学习", StringComparison.OrdinalIgnoreCase) ||
                title.Equals("任务学习", StringComparison.OrdinalIgnoreCase) ||
-               title.Equals("学生课程", StringComparison.OrdinalIgnoreCase);
+               title.Equals("学生课程", StringComparison.OrdinalIgnoreCase) ||
+               title.Equals("返回课程", StringComparison.OrdinalIgnoreCase) ||
+               title.Equals("提示", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void SyncCurrentCourseCard(string courseTitle)
+    {
+        var currentUrl = Browser.Source?.ToString() ?? string.Empty;
+        if (!ChaoxingUrlClassifier.IsStudyUri(currentUrl) || IsGenericCourseTitle(courseTitle))
+            return;
+
+        var matching = _vm.Courses.FirstOrDefault(x => SameCourseContext(x.Url, currentUrl));
+        if (matching is null)
+        {
+            matching = new CourseItem { Title = courseTitle.Trim(), Url = currentUrl };
+            _vm.Courses.Add(matching);
+        }
+        else
+        {
+            matching.Title = courseTitle.Trim();
+        }
+
+        foreach (var invalid in _vm.Courses.Where(x => IsGenericCourseTitle(x.Title)).ToArray())
+            _vm.Courses.Remove(invalid);
+        _vm.SelectedCourse = matching;
+        _courseCacheService.Save(_vm.Courses);
     }
 
     private static string NormalizeTitleKey(string? value)
@@ -2401,8 +2440,8 @@ public partial class MainWindow : Window
     private void ExportDiagnostics_Click(object sender, RoutedEventArgs e)
     {
         var confirm = System.Windows.MessageBox.Show(
-            "诊断包可能包含当前页面 URL、课程或章节名称以及程序日志，但不会主动包含账号密码或 WebView2 Cookie。\n\n是否导出？",
-            "导出诊断包",
+            "反馈包可能包含当前页面地址、课程或章节名称以及程序日志，但不会主动包含账号密码或浏览器登录资料。\n\n是否导出？",
+            "导出反馈包",
             MessageBoxButton.YesNo,
             MessageBoxImage.Information);
 
@@ -2413,7 +2452,7 @@ public partial class MainWindow : Window
         {
             var snapshot = BuildDiagnosticSnapshot();
             var path = _diagnosticService.Export(snapshot);
-            System.Windows.MessageBox.Show($"诊断包已保存：\n{path}", "导出完成", MessageBoxButton.OK, MessageBoxImage.Information);
+            System.Windows.MessageBox.Show($"反馈包已保存：\n{path}", "导出完成", MessageBoxButton.OK, MessageBoxImage.Information);
 
             var folder = Path.GetDirectoryName(path);
             if (!string.IsNullOrWhiteSpace(folder))
@@ -2428,7 +2467,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             _lastError = ex.Message;
-            App.Logger.Error("DIAG-001", "诊断包导出失败。", ex);
+            App.Logger.Error("DIAG-001", "反馈包导出失败。", ex);
             System.Windows.MessageBox.Show(ex.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -2796,23 +2835,39 @@ public partial class MainWindow : Window
         _compactViewingMode = true;
         _workspaceMarginBeforeCompact = MainWorkspace.Margin;
         _leftColumnBeforeCompact = LeftNavigationColumn.Width;
+        _leftSplitterBeforeCompact = LeftSplitterColumn.Width;
         _rightSplitterBeforeCompact = RightSplitterColumn.Width;
         _telemetryColumnBeforeCompact = TelemetryColumn.Width;
         _rightTelemetryVisibilityBeforeCompact = RightTelemetryCard.Visibility;
+        _windowStateBeforeCompact = WindowState;
 
-        LibraryTabs.SelectedIndex = 1;
-        LeftNavigationColumn.Width = new GridLength(286);
+        TopCommandDeck.Visibility = Visibility.Collapsed;
+        FooterBar.Visibility = Visibility.Collapsed;
+        LeftNavigationCard.Visibility = Visibility.Collapsed;
+        LeftWorkspaceSplitter.Visibility = Visibility.Collapsed;
+        BrowserToolbar.Visibility = Visibility.Collapsed;
+        BrowserFooterDashboard.Visibility = Visibility.Collapsed;
+        TopCommandRow.Height = new GridLength(0);
+        FooterRow.Height = new GridLength(0);
+        BrowserHeaderRow.Height = new GridLength(0);
+        BrowserFooterRow.Height = new GridLength(0);
+        LeftNavigationColumn.Width = new GridLength(0);
+        LeftSplitterColumn.Width = new GridLength(0);
         RightSplitterColumn.Width = new GridLength(0);
         TelemetryColumn.Width = new GridLength(0);
         RightWorkspaceSplitter.Visibility = Visibility.Collapsed;
         RightTelemetryCard.Visibility = Visibility.Collapsed;
-        MainWorkspace.Margin = new Thickness(12, 12, 12, 10);
+        BrowserWorkspaceCard.Padding = new Thickness(0);
+        BrowserWorkspaceCard.BorderThickness = new Thickness(0);
+        BrowserWorkspaceCard.CornerRadius = new CornerRadius(0);
+        MainWorkspace.Margin = new Thickness(0);
+        WindowState = WindowState.Maximized;
 
         ViewingModeButton.Content = "▤";
-        ViewingModeButton.ToolTip = "退出宽屏观看（Esc / F11）";
-        BottomHintText.Text = "宽屏观看已启用：保留窗口标题栏、任务栏和章节列表；按 Esc 或 F11 退出。";
-        ShowInAppNotice("宽屏观看已开启", "右侧状态栏已经收起，章节列表和视频区域继续保留。", false);
-        App.Logger.Info("UI-COMPACT-VIEW", "进入非全屏宽屏观看模式。");
+        ViewingModeButton.ToolTip = "退出全屏观看（Esc / F11）";
+        BottomHintText.Text = "全屏网页观看已启用；按 Esc 或 F11 退出。";
+        ShowInAppNotice("全屏观看已开启", "课程网页已经铺满窗口；按 Esc 或 F11 返回。", false);
+        App.Logger.Info("UI-COMPACT-VIEW", "进入全屏网页观看模式。");
     }
 
     private void ExitCompactViewingMode()
@@ -2821,17 +2876,32 @@ public partial class MainWindow : Window
             return;
         _compactViewingMode = false;
         LeftNavigationColumn.Width = _leftColumnBeforeCompact;
+        LeftSplitterColumn.Width = _leftSplitterBeforeCompact;
         RightSplitterColumn.Width = _rightSplitterBeforeCompact;
         TelemetryColumn.Width = _telemetryColumnBeforeCompact;
         MainWorkspace.Margin = _workspaceMarginBeforeCompact;
+        TopCommandRow.Height = new GridLength(92);
+        FooterRow.Height = new GridLength(38);
+        BrowserHeaderRow.Height = new GridLength(96);
+        BrowserFooterRow.Height = new GridLength(132);
+        TopCommandDeck.Visibility = Visibility.Visible;
+        FooterBar.Visibility = Visibility.Visible;
+        LeftNavigationCard.Visibility = Visibility.Visible;
+        LeftWorkspaceSplitter.Visibility = Visibility.Visible;
+        BrowserToolbar.Visibility = Visibility.Visible;
+        BrowserFooterDashboard.Visibility = Visibility.Visible;
         RightWorkspaceSplitter.Visibility = Visibility.Visible;
         RightTelemetryCard.Visibility = _rightTelemetryVisibilityBeforeCompact;
+        BrowserWorkspaceCard.Padding = new Thickness(7);
+        BrowserWorkspaceCard.BorderThickness = new Thickness(2);
+        BrowserWorkspaceCard.CornerRadius = new CornerRadius(14);
+        WindowState = _windowStateBeforeCompact;
 
         ViewingModeButton.Content = "▣";
-        ViewingModeButton.ToolTip = "宽屏观看（非全屏，F11）";
-        BottomHintText.Text = "已退出宽屏观看。";
-        ShowInAppNotice("宽屏观看已关闭", "三栏工作区已经恢复。", false);
-        App.Logger.Info("UI-COMPACT-VIEW", "退出非全屏宽屏观看模式。");
+        ViewingModeButton.ToolTip = "全屏观看（F11）";
+        BottomHintText.Text = "已退出全屏观看。";
+        ShowInAppNotice("全屏观看已关闭", "课程目录、播放舱和运行状态已经恢复。", false);
+        App.Logger.Info("UI-COMPACT-VIEW", "退出全屏网页观看模式。");
     }
 
     private void Back_Click(object sender, RoutedEventArgs e)
@@ -2993,7 +3063,7 @@ public partial class MainWindow : Window
     private void LoadCachedCourses()
     {
         if (_vm.Courses.Count > 0) return;
-        foreach (var course in _courseCacheService.Load())
+        foreach (var course in _courseCacheService.Load().Where(x => !IsGenericCourseTitle(x.Title)))
             _vm.Courses.Add(course);
         if (_vm.Courses.Count > 0)
             App.Logger.Info("COURSE-CACHE", $"已载入 {_vm.Courses.Count} 条最近课程缓存。");
@@ -3006,8 +3076,13 @@ public partial class MainWindow : Window
         // 托盘图标仍用于通知和快速恢复，但不会让 EXE 从任务栏“消失”。
         if (WindowState == WindowState.Minimized)
         {
+            _ambientMotion?.Pause(this);
             ShowInTaskbar = true;
             App.Logger.Debug("UI-MINIMIZE", "窗口已最小化并保留任务栏入口。");
+        }
+        else
+        {
+            _ambientMotion?.Resume(this);
         }
     }
 
@@ -3015,6 +3090,7 @@ public partial class MainWindow : Window
     {
         _isClosing = true;
         _playerTimer?.Stop();
+        _ambientMotion?.Stop(this);
         _lifetimeCts.Cancel();
         _navigationWorkCts?.Cancel();
         _navigationTimeoutCts?.Cancel();

@@ -76,7 +76,7 @@
                 <Border Style="{StaticResource CardBorderStyle}" Padding="16" Margin="0,0,0,12">
                     <StackPanel>
                         <TextBlock Text="诊断" Style="{StaticResource SectionTitleStyle}"/>
-                        <CheckBox x:Name="DeveloperCheck" Content="开启开发者模式" Margin="3,11,3,0" Checked="Option_Changed" Unchecked="Option_Changed"/>
+                        <CheckBox x:Name="DeveloperCheck" Content="显示详细日志" Margin="3,11,3,0" Checked="Option_Changed" Unchecked="Option_Changed"/>
                     </StackPanel>
                 </Border>
 

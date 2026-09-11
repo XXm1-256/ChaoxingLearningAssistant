@@ -44,6 +44,54 @@ function chapter(status) {
   return { innerText: '第一节', href: 'https://example.test/studentstudy?chapterId=1',
     closest: () => container, getAttribute: () => '' };
 }
+
+test('course scanner excludes 返回课程 and keeps the real course card title', () => {
+  const back = {
+    href: 'https://mooc1.chaoxing.com/mycourse/studentcourse?courseId=course-a',
+    innerText: '返回课程', textContent: '返回课程', parentElement: null,
+    getAttribute: key => key === 'title' ? '返回课程' : '',
+    closest: () => null,
+  };
+  const card = {
+    querySelector: selector => selector.includes('.course-name')
+      ? { innerText: '中国现代文学', getAttribute: () => '中国现代文学' }
+      : null,
+  };
+  const course = {
+    href: 'https://mooc1.chaoxing.com/mycourse/studentcourse?courseId=course-b',
+    innerText: '进入课程', textContent: '进入课程', parentElement: card,
+    getAttribute: key => key === 'title' ? '' : '',
+    closest: () => card,
+  };
+  const result = vm.runInNewContext(script('ScanCoursesAsync'), {
+    document: { querySelectorAll: () => [back, course] },
+    location: { href: 'https://mooc1.chaoxing.com/space/index' }, URL,
+  }, { timeout: 1000 });
+  assert.equal(result.length, 1);
+  assert.equal(result[0].title, '中国现代文学');
+  assert.match(result[0].url, /course-b/);
+});
+
+test('course scanner does not turn a nearby 提示 heading into a course', () => {
+  const wrapper = {
+    querySelector: selector => selector.includes('h3')
+      ? { innerText: '提示', getAttribute: () => '提示' }
+      : null,
+  };
+  const back = {
+    href: 'https://mooc1.chaoxing.com/mycourse/studentcourse?courseId=course-a',
+    innerText: '返回课程', textContent: '返回课程', parentElement: wrapper,
+    getAttribute: key => key === 'title' ? '返回课程' : '',
+    closest: () => wrapper,
+  };
+
+  const result = vm.runInNewContext(script('ScanCoursesAsync'), {
+    document: { querySelectorAll: () => [back] },
+    location: { href: 'https://mooc1.chaoxing.com/mycourse/studentstudy?courseId=course-a' }, URL,
+  }, { timeout: 1000 });
+
+  assert.equal(result.length, 0);
+});
 for (const [status, completed] of [
   ['未完成', false], ['未看完', false], ['not completed', false], ['unfinished', false],
   ['已完成', true], ['已看完', true], ['completed', true], ['完成度 0%', false],

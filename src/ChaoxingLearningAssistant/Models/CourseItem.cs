@@ -5,9 +5,14 @@ namespace ChaoxingLearningAssistant.Models;
 
 public sealed class CourseItem : ObservableObject
 {
+    private string _title = string.Empty;
     private int _videoCount;
     private int _completedCount;
-    public string Title { get; set; } = string.Empty;
+    public string Title
+    {
+        get => _title;
+        set => SetProperty(ref _title, value);
+    }
     public string Url { get; set; } = string.Empty;
     public int VideoCount
     {

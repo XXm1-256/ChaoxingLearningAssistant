@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Threading;
 using ChaoxingLearningAssistant.Services;
 using ChaoxingLearningAssistant.Views;
@@ -18,7 +18,7 @@ public partial class App : System.Windows.Application
         Logger = new FileLogger(AppPaths.LogDirectory);
         Settings = new SettingsService(AppPaths.SettingsFile, Logger);
         Logger.CleanupOldLogs(Settings.Current.LogRetentionDays);
-        Logger.Info("APP-VERSION", "学习通课程播放辅助 v1.32 (1.32.0)");
+        Logger.Info("APP-VERSION", "学习通课程视频播放助手 v1.34 (1.34.0)");
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
@@ -50,8 +50,8 @@ public partial class App : System.Windows.Application
             try
             {
                 System.Windows.MessageBox.Show(
-                    $"v1.32 遇到无法继续运行的界面错误，程序将关闭。\n\n{detail}\n\n日志目录：{AppPaths.LogDirectory}\n重新启动后可尝试恢复上次学习位置。",
-                    "学习通课程播放辅助 v1.32",
+                    $"v1.34 遇到无法继续运行的界面错误，程序将关闭。\n\n{detail}\n\n日志目录：{AppPaths.LogDirectory}\n重新启动后可尝试恢复上次学习位置。",
+                    "学习通课程视频播放助手 v1.34",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }

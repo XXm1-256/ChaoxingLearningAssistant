@@ -91,7 +91,7 @@ public sealed class ModelTests
 
         var result = CoursePlaybackPlan.BuildPendingChapters(chapters, 0, new HashSet<string>());
 
-        CollectionAssert.AreEqual(new[] { "unknown", "pending" }, result.Select(x => x.ChapterId).ToArray());
+        CollectionAssert.AreEqual(new[] { "pending" }, result.Select(x => x.ChapterId).ToArray());
     }
 
     [TestMethod]
@@ -99,9 +99,9 @@ public sealed class ModelTests
     {
         var chapters = new[]
         {
-            new ChapterItem { Index = 0, ChapterId = "before", TaskType = TaskType.Unknown },
-            new ChapterItem { Index = 1, ChapterId = "checked", TaskType = TaskType.Unknown },
-            new ChapterItem { Index = 2, ChapterId = "next", TaskType = TaskType.Unknown }
+            new ChapterItem { Index = 0, ChapterId = "before", TaskType = TaskType.Video },
+            new ChapterItem { Index = 1, ChapterId = "checked", TaskType = TaskType.Video },
+            new ChapterItem { Index = 2, ChapterId = "next", TaskType = TaskType.Video }
         };
         var verified = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -132,6 +132,97 @@ public sealed class ModelTests
         };
 
         Assert.IsTrue(CoursePlaybackPlan.HasPendingVideo(chapter));
+    }
+
+    [TestMethod]
+    public void CoursePlaybackPlan_SkipsIncompleteChapterWhenAllVideosAreComplete()
+    {
+        var chapter = new ChapterItem
+        {
+            Index = 0,
+            ChapterId = "mixed-with-quiz",
+            TaskType = TaskType.Video,
+            CompletionKnown = true,
+            IsCompleted = false,
+            VideoTasks = new List<VideoTaskItem>
+            {
+                new() { CompletionKnown = true, IsCompleted = true },
+                new() { CompletionKnown = true, IsCompleted = true }
+            }
+        };
+
+        Assert.IsFalse(CoursePlaybackPlan.HasPendingVideo(chapter));
+    }
+
+    [TestMethod]
+    public void NextVideoPreview_PrefersLaterVideoInCurrentChapter()
+    {
+        var first = new VideoTaskItem { Index = 0, TaskKey = "one", Title = "视频一", IsPlaying = true };
+        var second = new VideoTaskItem { Index = 1, TaskKey = "two", Title = "视频二" };
+        var chapter = new ChapterItem
+        {
+            Index = 0,
+            ChapterId = "chapter-one",
+            TaskType = TaskType.Video,
+            VideoTasks = new List<VideoTaskItem> { first, second }
+        };
+
+        var result = NextVideoPreviewResolver.Resolve(new[] { chapter }, chapter, first);
+
+        Assert.AreEqual("第 2/2 个视频 · 视频二", result);
+    }
+
+    [TestMethod]
+    public void NextVideoPreview_SkipsQuizAndCompletedVideos()
+    {
+        var currentTask = new VideoTaskItem { Index = 0, TaskKey = "current", Title = "当前视频" };
+        var current = new ChapterItem
+        {
+            Index = 0,
+            ChapterId = "current",
+            TaskType = TaskType.Video,
+            VideoTasks = new List<VideoTaskItem> { currentTask }
+        };
+        var quiz = new ChapterItem { Index = 1, ChapterId = "quiz", TaskType = TaskType.Quiz };
+        var completed = new ChapterItem
+        {
+            Index = 2,
+            ChapterId = "done",
+            TaskType = TaskType.Video,
+            VideoTasks = new List<VideoTaskItem>
+            {
+                new() { Index = 0, Title = "已完成视频", CompletionKnown = true, IsCompleted = true }
+            }
+        };
+        var pending = new ChapterItem
+        {
+            Index = 3,
+            ChapterId = "pending",
+            TaskType = TaskType.Video,
+            VideoTasks = new List<VideoTaskItem> { new() { Index = 0, Title = "真正的下一视频" } }
+        };
+
+        var result = NextVideoPreviewResolver.Resolve(
+            new[] { current, quiz, completed, pending }, current, currentTask);
+
+        Assert.AreEqual("下一视频 · 真正的下一视频", result);
+    }
+
+    [TestMethod]
+    public void NextVideoPreview_DoesNotPresentQuizAsVideo()
+    {
+        var task = new VideoTaskItem { Index = 0, TaskKey = "current" };
+        var current = new ChapterItem
+        {
+            Index = 0,
+            TaskType = TaskType.Video,
+            VideoTasks = new List<VideoTaskItem> { task }
+        };
+        var quiz = new ChapterItem { Index = 1, TaskType = TaskType.Quiz, Title = "章节测验" };
+
+        var result = NextVideoPreviewResolver.Resolve(new[] { current, quiz }, current, task);
+
+        Assert.AreEqual(NextVideoPreviewResolver.NoNextText, result);
     }
 
     [TestMethod]

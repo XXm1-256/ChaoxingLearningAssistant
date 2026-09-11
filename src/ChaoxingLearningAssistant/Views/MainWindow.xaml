@@ -2,13 +2,94 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
-        Title="学习通课程播放辅助 v1.32"
-        Width="1540" Height="940"
+        Title="学习通课程视频播放助手 v1.34"
+        Width="1420" Height="820"
         MinWidth="1220" MinHeight="760"
         WindowStartupLocation="CenterScreen"
         ShowInTaskbar="True">
+    <Window.Resources>
+            <Style x:Key="DarkPanelStyle" TargetType="Border">
+                <Setter Property="Background" Value="#99102B3E"/>
+                <Setter Property="BorderBrush" Value="#3B5CE1C1"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="10"/>
+            </Style>
+            <Style x:Key="DarkLabelStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="#8FB6C4"/>
+                <Setter Property="FontSize" Value="10.5"/>
+            </Style>
+            <Style x:Key="DarkValueStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="#F0FFFC"/>
+                <Setter Property="FontSize" Value="13.5"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+            </Style>
+            <Style x:Key="DarkButtonStyle" TargetType="Button">
+                <Setter Property="Foreground" Value="#F0FFFC"/>
+                <Setter Property="Background" Value="#C0153B55"/>
+                <Setter Property="BorderBrush" Value="#7062CDB9"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Padding" Value="14,9"/>
+                <Setter Property="MinHeight" Value="38"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="ContentTemplate">
+                    <Setter.Value>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"/>
+                        </DataTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Chrome" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="9" Padding="{TemplateBinding Padding}" RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1"/></Border.RenderTransform>
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Chrome" Property="Background" Value="#D01C5367"/>
+                                    <Setter TargetName="Chrome" Property="BorderBrush" Value="#56E1C1"/>
+                                    <Setter Property="Foreground" Value="#FFFFFF"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Chrome" Property="RenderTransform">
+                                        <Setter.Value>
+                                            <TransformGroup>
+                                                <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                                                <TranslateTransform Y="2"/>
+                                            </TransformGroup>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="Chrome" Property="Opacity" Value="0.38"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Storyboard x:Key="AmbientMotion" RepeatBehavior="Forever">
+                <DoubleAnimation Storyboard.TargetName="ParticleOne" Storyboard.TargetProperty="(Canvas.Top)"
+                                 From="92" To="34" Duration="0:0:7" AutoReverse="True" RepeatBehavior="Forever"/>
+                <DoubleAnimation Storyboard.TargetName="ParticleTwo" Storyboard.TargetProperty="(Canvas.Left)"
+                                 From="390" To="470" Duration="0:0:9" AutoReverse="True" RepeatBehavior="Forever"/>
+                <DoubleAnimation Storyboard.TargetName="ParticleThree" Storyboard.TargetProperty="Opacity"
+                                 From="0.18" To="0.75" Duration="0:0:3.2" AutoReverse="True" RepeatBehavior="Forever"/>
+                <DoubleAnimation Storyboard.TargetName="StatusAura" Storyboard.TargetProperty="Opacity"
+                                 From="0.25" To="0.7" Duration="0:0:1.8" AutoReverse="True" RepeatBehavior="Forever"/>
+                <DoubleAnimation Storyboard.TargetName="FlowPulse" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                 From="0" To="110" Duration="0:0:2.6" RepeatBehavior="Forever"/>
+                <DoubleAnimation Storyboard.TargetName="StatusRotor" Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                 From="0" To="360" Duration="0:0:9" RepeatBehavior="Forever"/>
+            </Storyboard>
+    </Window.Resources>
     <Grid Background="{DynamicResource WindowBackgroundBrush}">
-        <!-- Very subtle ambient light. It adds depth without turning the app into a neon-game UI. -->
         <Canvas IsHitTestVisible="False" Opacity="0.52">
             <Ellipse Width="560" Height="560" Canvas.Left="-250" Canvas.Top="-310">
                 <Ellipse.Fill>
@@ -26,13 +107,18 @@
                     </RadialGradientBrush>
                 </Ellipse.Fill>
             </Ellipse>
+            <Ellipse x:Name="ParticleOne" Width="5" Height="5" Canvas.Left="210" Canvas.Top="92" Fill="#7ED5A2"/>
+            <Ellipse x:Name="ParticleTwo" Width="4" Height="4" Canvas.Left="390" Canvas.Top="170" Fill="#5DBD84"/>
+            <Ellipse x:Name="ParticleThree" Width="6" Height="6" Canvas.Right="270" Canvas.Top="126" Fill="#8CDDB0" Opacity="0.3"/>
+            <Ellipse Width="3" Height="3" Canvas.Left="54" Canvas.Bottom="135" Fill="#76C998" Opacity="0.52"/>
+            <Ellipse Width="4" Height="4" Canvas.Right="118" Canvas.Bottom="82" Fill="#76C998" Opacity="0.38"/>
         </Canvas>
 
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="78"/>
+                <RowDefinition x:Name="TopCommandRow" Height="92"/>
                 <RowDefinition Height="*"/>
-                <RowDefinition Height="38"/>
+                <RowDefinition x:Name="FooterRow" Height="38"/>
             </Grid.RowDefinitions>
 
             <!-- Top command deck -->
@@ -50,29 +136,38 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Width="46" Height="46" CornerRadius="13"
-                                Background="{StaticResource AccentGradientBrush}"
-                                Effect="{StaticResource GlowShadow}">
-                            <TextBlock Text="CX" Foreground="White" FontWeight="Bold" FontSize="16"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
+                        <Grid Width="54" Height="54" Margin="0,0,2,0">
+                            <Ellipse Stroke="{DynamicResource AccentBrush}" StrokeThickness="2"/>
+                            <Ellipse Stroke="#6656E1C1" StrokeThickness="1" Margin="7"/>
+                            <Border Width="28" Height="28" CornerRadius="5" Background="{StaticResource AccentGradientBrush}"
+                                    RenderTransformOrigin="0.5,0.5" Effect="{StaticResource GlowShadow}">
+                                <Border.RenderTransform><RotateTransform Angle="-12"/></Border.RenderTransform>
+                                <TextBlock Text="学" Foreground="White" FontWeight="Bold" FontSize="16"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
                         <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="学习通课程播放辅助" FontSize="18" FontWeight="SemiBold"
+                            <TextBlock Text="学习通课程视频播放助手" FontSize="20" FontWeight="Bold"
                                        Foreground="{DynamicResource PrimaryTextBrush}"/>
-                            <TextBlock Text="课程播放与章节辅助 · 数据仅保存在本机"
-                                       FontSize="10.5" Margin="0,3,0,0"
+                            <TextBlock Text="课程视频连续播放辅助"
+                                       FontSize="10.5" Margin="1,4,0,0"
                                        Foreground="{DynamicResource TertiaryTextBrush}"/>
                         </StackPanel>
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Background="#72E8F7F8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0"
+                                Padding="0,0,18,0" Margin="0,0,16,0" MaxWidth="270">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="当前课程：" FontWeight="SemiBold" FontSize="12"/>
+                                <TextBlock Text="{Binding SelectedCourse.Title}" FontWeight="Bold" FontSize="14"
+                                           TextTrimming="CharacterEllipsis" MaxWidth="180"/>
+                            </StackPanel>
+                        </Border>
                         <Button x:Name="StartButton" Style="{StaticResource PrimaryButtonStyle}" Content="▶  开始" Click="Start_Click"/>
-                        <Button x:Name="PauseVideoButton" Content="Ⅱ  暂停视频" Click="PauseVideo_Click"/>
-                        <Button x:Name="PauseAutomationButton" Content="◇  暂停辅助" Click="PauseAutomation_Click"/>
-                        <Button Content="■  停止" Click="Stop_Click"/>
-                        <Border Width="1" Height="28" Background="{DynamicResource BorderBrush}" Margin="10,0"/>
-                        <Button Style="{StaticResource GhostButtonStyle}" Content="刷新课程" Click="RefreshCourses_Click"/>
-                        <Button Style="{StaticResource GhostButtonStyle}" Content="课程首页" Click="ReturnCourses_Click"/>
+                        <Button x:Name="PauseAutomationButton" Style="{StaticResource DarkButtonStyle}" Content="Ⅱ  暂停辅助" Click="PauseAutomation_Click"/>
+                        <Button Style="{StaticResource GhostButtonStyle}" Content="⚙  设置" Click="Settings_Click"/>
+                        <Button Style="{StaticResource GhostButtonStyle}" Content="▱  使用教学" Click="Tutorial_Click"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
@@ -89,26 +184,24 @@
                             </StackPanel>
                         </Border>
                         <Button Style="{StaticResource IconButtonStyle}" Content="▤" ToolTip="学习统计" Click="Stats_Click"/>
-                        <Button Style="{StaticResource IconButtonStyle}" Content="≡" ToolTip="日志" Click="Logs_Click"/>
-                        <Button Style="{StaticResource IconButtonStyle}" Content="?" ToolTip="使用教学" Click="Tutorial_Click"/>
-                        <Button Style="{StaticResource IconButtonStyle}" Content="⚙" ToolTip="设置" Click="Settings_Click"/>
-                        <Button Style="{StaticResource IconButtonStyle}" Content="⌁" ToolTip="导出诊断包" Click="ExportDiagnostics_Click"/>
+                        <Button Style="{StaticResource IconButtonStyle}" Content="≡" ToolTip="日志与反馈" Click="Logs_Click"/>
+                        <Button Style="{StaticResource IconButtonStyle}" Content="⌁" ToolTip="导出反馈包" Click="ExportDiagnostics_Click"/>
                     </StackPanel>
                 </Grid>
             </Border>
 
             <!-- Main three-column workspace -->
-            <Grid x:Name="MainWorkspace" Grid.Row="1" Margin="18,18,18,14">
+            <Grid x:Name="MainWorkspace" Grid.Row="1" Margin="14,12,14,10">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="LeftNavigationColumn" Width="318"/>
-                    <ColumnDefinition x:Name="LeftSplitterColumn" Width="14"/>
+                    <ColumnDefinition x:Name="LeftNavigationColumn" Width="300"/>
+                    <ColumnDefinition x:Name="LeftSplitterColumn" Width="12"/>
                     <ColumnDefinition x:Name="BrowserColumn" Width="*"/>
-                    <ColumnDefinition x:Name="RightSplitterColumn" Width="14"/>
-                    <ColumnDefinition x:Name="TelemetryColumn" Width="338"/>
+                    <ColumnDefinition x:Name="RightSplitterColumn" Width="12"/>
+                    <ColumnDefinition x:Name="TelemetryColumn" Width="286"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- Left navigation card -->
-                <Border x:Name="LeftNavigationCard" Grid.Column="0" Style="{StaticResource CardBorderStyle}" Padding="14"
+                <Border x:Name="LeftNavigationCard" Grid.Column="0" Style="{StaticResource CardBorderStyle}" Padding="10"
                         Effect="{StaticResource PanelShadow}">
                     <Grid>
                         <Grid.RowDefinitions>
@@ -122,10 +215,7 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <TextBlock Text="课程目录" Style="{StaticResource EyebrowTextStyle}"/>
-                                <TextBlock Text="课程与章节" Style="{StaticResource SectionTitleStyle}" Margin="0,4,0,0"/>
-                            </StackPanel>
+                            <TextBlock Text="课程目录" Style="{StaticResource SectionTitleStyle}" VerticalAlignment="Center"/>
                             <Button Grid.Column="1" Style="{StaticResource GhostButtonStyle}"
                                     Content="打开未完成章节" ToolTip="只打开平台明确标记为未完成的章节"
                                     Click="JumpToUnfinished_Click" VerticalAlignment="Center"/>
@@ -184,8 +274,28 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="*"/>
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Text="›" FontSize="16" Margin="0,0,9,0"
-                                                           Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Top"/>
+                                                <Border Width="22" Height="22" CornerRadius="11" Margin="0,0,9,0"
+                                                        BorderBrush="{DynamicResource BorderStrongBrush}" BorderThickness="1"
+                                                        VerticalAlignment="Center">
+                                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Text" Value="○"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource TertiaryTextBrush}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsCompleted}" Value="True">
+                                                                        <Setter Property="Text" Value="✓"/>
+                                                                        <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                        <Setter Property="Text" Value="▶"/>
+                                                                        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Border>
                                                 <TextBlock Grid.Column="1" Text="{Binding DisplayTitle}" ToolTip="{Binding DisplayTitle}"
                                                            TextWrapping="Wrap" FontSize="13" VerticalAlignment="Center"/>
                                             </Grid>
@@ -200,57 +310,66 @@
                 <GridSplitter x:Name="LeftWorkspaceSplitter" Grid.Column="1" Width="14" HorizontalAlignment="Stretch" Background="Transparent"/>
 
                 <!-- Center browser workspace -->
-                <Border x:Name="BrowserWorkspaceCard" Grid.Column="2" Style="{StaticResource CardBorderStyle}" Effect="{StaticResource PanelShadow}">
+                <Border x:Name="BrowserWorkspaceCard" Grid.Column="2" Background="{StaticResource HeroGradientBrush}"
+                        BorderBrush="{DynamicResource AccentSecondaryBrush}" BorderThickness="2" CornerRadius="14"
+                        Padding="7" Effect="{StaticResource GlowShadow}">
                     <Grid>
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="64"/>
+                            <RowDefinition x:Name="BrowserHeaderRow" Height="96"/>
                             <RowDefinition Height="*"/>
+                            <RowDefinition x:Name="BrowserFooterRow" Height="132"/>
                         </Grid.RowDefinitions>
 
-                        <Grid x:Name="BrowserToolbar" Margin="14,10">
+                        <Canvas Grid.RowSpan="3" IsHitTestVisible="False" Opacity="0.72">
+                            <Ellipse Width="3" Height="3" Fill="#7DEFD2" Canvas.Left="82" Canvas.Top="54"/>
+                            <Ellipse Width="2" Height="2" Fill="#78AFC4" Canvas.Left="310" Canvas.Top="38"/>
+                            <Ellipse Width="4" Height="4" Fill="#9AF7DE" Canvas.Right="96" Canvas.Top="72" Effect="{StaticResource GlowShadow}"/>
+                            <Ellipse Width="2" Height="2" Fill="#71C7C4" Canvas.Right="218" Canvas.Bottom="52"/>
+                        </Canvas>
+                        <Path Grid.Row="0" Panel.ZIndex="3" Height="18" Margin="7,-7,7,0" VerticalAlignment="Top"
+                              Stretch="Fill" Stroke="#8A56E1C1" StrokeThickness="1.5"
+                              Data="M 0,18 L 0,8 L 105,8 L 120,0 L 420,0 L 435,8 L 760,8 L 775,0 L 1000,0"/>
+                        <Path Grid.Row="2" Panel.ZIndex="3" Height="16" Margin="7,0,7,-7" VerticalAlignment="Bottom"
+                              Stretch="Fill" Stroke="#5E56E1C1" StrokeThickness="1.5"
+                              Data="M 0,0 L 165,0 L 180,8 L 465,8 L 480,16 L 780,16 L 795,8 L 1000,8"/>
+
+                        <Grid x:Name="BrowserToolbar" Margin="18,10,14,8">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <Button Grid.Column="0" Style="{StaticResource IconButtonStyle}" Content="←" ToolTip="后退" Click="Back_Click"/>
-                            <Border Grid.Column="1" Margin="7,0,7,0" CornerRadius="11"
-                                    Background="{DynamicResource InputBackgroundBrush}"
-                                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="⌁" Foreground="{DynamicResource AccentBrush}" FontSize="15"
-                                               VerticalAlignment="Center" Margin="12,0,3,0"/>
-                                    <TextBox x:Name="AddressBox" Grid.Column="1" VerticalContentAlignment="Center"
-                                             BorderThickness="0" Background="Transparent" Margin="0"
-                                             ToolTip="可手动粘贴学习通课程或章节地址"/>
-                                </Grid>
-                            </Border>
-                            <Button Grid.Column="2" Content="打开" Click="OpenAddress_Click"/>
-                            <Button Grid.Column="3" Style="{StaticResource GhostButtonStyle}" Content="刷新" Click="Reload_Click"/>
-                            <Button Grid.Column="4" Style="{StaticResource IconButtonStyle}" Content="↤"
-                                    ToolTip="向左横移网页；也可按住 Shift 滚动鼠标滚轮"
-                                    Click="ScrollLeft_Click"/>
-                            <Button Grid.Column="5" Style="{StaticResource IconButtonStyle}" Content="↦"
-                                    ToolTip="向右横移网页；也可按住 Shift 滚动鼠标滚轮"
-                                    Click="ScrollRight_Click"/>
-                            <Button x:Name="ViewingModeButton" Grid.Column="6"
-                                    Style="{StaticResource IconButtonStyle}" Content="▣"
-                                    ToolTip="宽屏观看（非全屏，F11）"
-                                    Click="ToggleViewingMode_Click"/>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="当前视频" FontSize="11" FontWeight="SemiBold" Foreground="#91BDCB"/>
+                                <TextBlock Text="{Binding CurrentVideoText}" TextTrimming="CharacterEllipsis"
+                                           FontSize="22" FontWeight="Bold" Foreground="#F3FFFC" Margin="0,5,0,0"/>
+                                <TextBlock Text="{Binding CurrentChapterText}" TextTrimming="CharacterEllipsis"
+                                           FontSize="11" Foreground="#8FB6C4" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border Background="#2811B991" BorderBrush="#6656E1C1" BorderThickness="1"
+                                        CornerRadius="16" Padding="11,6" Margin="0,0,8,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Ellipse Width="7" Height="7" Fill="#54E7C3" Margin="0,0,7,0" Effect="{StaticResource GlowShadow}"/>
+                                        <TextBlock Text="{Binding PlaybackStatusText}" Foreground="#68E8C9" FontSize="11" FontWeight="Bold"/>
+                                    </StackPanel>
+                                </Border>
+                                <Button Style="{StaticResource DarkButtonStyle}" Content="←" ToolTip="后退" Click="Back_Click" Padding="12,8"/>
+                                <Button Style="{StaticResource DarkButtonStyle}" Content="⌂" ToolTip="课程首页" Click="ReturnCourses_Click" Padding="12,8"/>
+                                <Button Style="{StaticResource DarkButtonStyle}" Content="↻" ToolTip="刷新网页" Click="Reload_Click" Padding="12,8"/>
+                                <Button Style="{StaticResource DarkButtonStyle}" Content="↤" ToolTip="网页向左横移" Click="ScrollLeft_Click" Padding="12,8"/>
+                                <Button Style="{StaticResource DarkButtonStyle}" Content="↦" ToolTip="网页向右横移" Click="ScrollRight_Click" Padding="12,8"/>
+                                <Button x:Name="ViewingModeButton" Style="{StaticResource DarkButtonStyle}" Content="▣"
+                                        ToolTip="全屏观看（F11）" Click="ToggleViewingMode_Click" Padding="12,8"/>
+                            </StackPanel>
+                            <TextBox x:Name="AddressBox" Visibility="Collapsed"/>
                         </Grid>
 
-                        <Grid Grid.Row="1" Margin="12,0,12,12">
-                            <Border CornerRadius="13" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
-                                    Background="{DynamicResource InputBackgroundBrush}" ClipToBounds="True">
-                                <wv2:WebView2 x:Name="Browser"/>
+                        <Grid Grid.Row="1" Margin="5,0,5,0">
+                            <Border CornerRadius="16" BorderBrush="{DynamicResource AccentSecondaryBrush}" BorderThickness="1"
+                                    Background="#071A15" Padding="7" ClipToBounds="True" Effect="{StaticResource GlowShadow}">
+                                <Border CornerRadius="11" BorderBrush="#557ED5A2" BorderThickness="1" ClipToBounds="True">
+                                    <wv2:WebView2 x:Name="Browser"/>
+                                </Border>
                             </Border>
 
                             <!-- Welcome hero -->
@@ -275,14 +394,14 @@
                                     </Grid.RowDefinitions>
 
                                     <StackPanel>
-                                        <Border HorizontalAlignment="Left" Background="#241DA9FF"
-                                                BorderBrush="#566FBFFF" BorderThickness="1" CornerRadius="13" Padding="9,4">
-                                            <TextBlock Text="准备就绪" FontSize="10" FontWeight="Bold" Foreground="#9BD2FF"/>
+                                        <Border HorizontalAlignment="Left" Background="#243D9B67"
+                                                BorderBrush="#667ED5A2" BorderThickness="1" CornerRadius="13" Padding="9,4">
+                                            <TextBlock Text="准备就绪" FontSize="10" FontWeight="Bold" Foreground="#A9E8C2"/>
                                         </Border>
                                         <TextBlock Text="专注课程，&#x0a;减少重复操作。"
                                                    FontSize="30" FontWeight="SemiBold" LineHeight="41"
                                                    Margin="0,16,0,0" Foreground="White"/>
-                                        <TextBlock Text="课程定位、播放状态、倍速继承、下一视频切换和本地诊断，都集中在这个界面。"
+                                        <TextBlock Text="课程定位、播放状态、倍速继承、下一视频切换和问题反馈，都集中在这个界面。"
                                                    TextWrapping="Wrap" FontSize="13.5" LineHeight="23"
                                                    Foreground="#B9C9DD" Margin="0,12,0,0"/>
                                     </StackPanel>
@@ -339,13 +458,64 @@
                                 </Grid>
                             </Border>
                         </Grid>
+
+                        <Border x:Name="BrowserFooterDashboard" Grid.Row="2" Margin="5,10,5,5" CornerRadius="10"
+                                Background="#A6071A2B" BorderBrush="#4556E1C1" BorderThickness="1" Padding="12,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Background="#B20C2B3D" BorderBrush="#870FD4AA" BorderThickness="1"
+                                        CornerRadius="8" Padding="12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Border Width="40" Height="40" CornerRadius="7" Background="#2E12C9A0" BorderBrush="#6A56E1C1" BorderThickness="1">
+                                            <TextBlock Text="▶" Foreground="#66E8C8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="当前视频" FontSize="10" Foreground="#7BD8C1"/>
+                                            <TextBlock Text="{Binding CurrentVideoText}" TextTrimming="CharacterEllipsis"
+                                                       FontSize="13" FontWeight="SemiBold" Foreground="White" Margin="0,4,0,0"/>
+                                            <TextBlock Text="{Binding PlayerTimeText}" FontSize="10" Foreground="#8FB6C4" Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                                <Grid Grid.Column="1" Margin="18,0" VerticalAlignment="Center" ClipToBounds="True">
+                                    <Border Height="1" Background="#7356E1C1"/>
+                                    <TextBlock Text="◆   ◆   ◆   ▶" Foreground="#55E7C5" FontSize="9" HorizontalAlignment="Center"
+                                               Effect="{StaticResource GlowShadow}"/>
+                                    <Ellipse x:Name="FlowPulse" Width="8" Height="8" HorizontalAlignment="Left"
+                                             Fill="#64E6C6" Effect="{StaticResource GlowShadow}">
+                                        <Ellipse.RenderTransform><TranslateTransform X="0"/></Ellipse.RenderTransform>
+                                    </Ellipse>
+                                </Grid>
+                                <Border Grid.Column="2" Background="#80102B3E" BorderBrush="#57688DA0" BorderThickness="1"
+                                        CornerRadius="8" Padding="12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <Border Width="40" Height="40" CornerRadius="7" Background="#242D596B" BorderBrush="#546A9EAB" BorderThickness="1">
+                                            <TextBlock Text="▷" Foreground="#A4C5CF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="下一视频" FontSize="10" Foreground="#91B8C7"/>
+                                            <TextBlock Text="{Binding NextVideoText}" TextTrimming="CharacterEllipsis"
+                                                       FontSize="13" FontWeight="SemiBold" Foreground="White" Margin="0,4,0,0"/>
+                                            <TextBlock Text="按课程顺序识别" FontSize="10" Foreground="#7895A0" Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </Border>
                     </Grid>
                 </Border>
 
                 <GridSplitter x:Name="RightWorkspaceSplitter" Grid.Column="3" Width="14" HorizontalAlignment="Stretch" Background="Transparent"/>
 
                 <!-- Right telemetry panel -->
-                <Border x:Name="RightTelemetryCard" Grid.Column="4" Style="{StaticResource CardBorderStyle}" Padding="15"
+                <Border x:Name="RightTelemetryCard" Grid.Column="4" Background="{StaticResource HeroGradientBrush}"
+                        BorderBrush="{DynamicResource AccentSecondaryBrush}" BorderThickness="2" CornerRadius="14" Padding="14"
                         Effect="{StaticResource PanelShadow}">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel>
@@ -354,50 +524,51 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="播放信息" Style="{StaticResource EyebrowTextStyle}"/>
-                                    <TextBlock Text="运行状态" Style="{StaticResource SectionTitleStyle}" Margin="0,4,0,0"/>
-                                </StackPanel>
-                                <Border Grid.Column="1" Background="{DynamicResource AccentSoftBrush}" CornerRadius="13" Padding="9,4" VerticalAlignment="Center">
-                                    <TextBlock Text="实时状态" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
+                                <TextBlock Text="运行状态" FontSize="17" FontWeight="Bold" Foreground="#F0FFFC" VerticalAlignment="Center"/>
+                                <Border Grid.Column="1" Background="#2911B991" BorderBrush="#6619DDB5" BorderThickness="1" CornerRadius="13" Padding="9,4" VerticalAlignment="Center">
+                                    <TextBlock Text="实时" FontSize="10" FontWeight="Bold" Foreground="#67E8C8"/>
                                 </Border>
                             </Grid>
 
                             <!-- Status hero -->
-                            <Border Background="{StaticResource HeroGradientBrush}"
+                            <Border Background="#B0062032"
                                     BorderBrush="{DynamicResource BorderStrongBrush}" BorderThickness="1"
-                                    CornerRadius="14" Padding="15" Margin="0,0,0,10">
-                                <StackPanel>
-                                    <TextBlock Text="视频状态" FontSize="10.5" FontWeight="SemiBold" Foreground="#86BFFF"/>
-                                    <TextBlock Text="{Binding PlaybackStatusText}" FontSize="22" FontWeight="SemiBold" Margin="0,5,0,0" Foreground="White"/>
-                                    <StackPanel Margin="0,9,0,0">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Ellipse Width="7" Height="7" Fill="{DynamicResource SuccessBrush}" Margin="0,0,7,0"/>
-                                            <TextBlock Text="{Binding AutomationStatusText}" FontSize="10.5" Foreground="#D5E2F2"/>
-                                        </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="14,4,0,0">
-                                            <TextBlock Text="辅助状态：" FontSize="10" Foreground="#AFC1D7"/>
-                                            <TextBlock Text="{Binding StatusText}" FontSize="10" Foreground="#AFC1D7"/>
-                                        </StackPanel>
-                                    </StackPanel>
+                                    CornerRadius="12" Padding="15" Margin="0,0,0,10">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <Grid Width="132" Height="132" Margin="0,0,0,8">
+                                        <Ellipse x:Name="StatusAura" Stroke="#4356E1C1" StrokeThickness="14" Opacity="0.4"/>
+                                        <Ellipse x:Name="StatusRotor" Stroke="#1EC6A4" StrokeThickness="2" Margin="12" StrokeDashArray="3,2"
+                                                 RenderTransformOrigin="0.5,0.5">
+                                            <Ellipse.RenderTransform><RotateTransform Angle="0"/></Ellipse.RenderTransform>
+                                        </Ellipse>
+                                        <Ellipse Stroke="#4B8FA0" StrokeThickness="1" Margin="25" StrokeDashArray="1,3"/>
+                                        <Ellipse Fill="#2512CBA3" Stroke="#7B56E1C1" StrokeThickness="1" Margin="37" Effect="{StaticResource GlowShadow}"/>
+                                        <TextBlock Text="▶" FontSize="34" Foreground="#79F4D7" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Grid>
+                                    <TextBlock Text="{Binding PlaybackStatusText}" FontSize="20" FontWeight="Bold" Foreground="#66E8C8"
+                                               HorizontalAlignment="Center"/>
+                                    <TextBlock Text="{Binding AutomationStatusText}" FontSize="11" Foreground="#A7C9D2"
+                                               HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                                    <TextBlock Text="{Binding StatusText}" FontSize="10" Foreground="#7895A0"
+                                               HorizontalAlignment="Center" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                             </Border>
 
-                            <Border Style="{StaticResource SubtleCardBorderStyle}" Padding="14" Margin="0,0,0,10">
+                            <Border Style="{StaticResource DarkPanelStyle}" Padding="14" Margin="0,0,0,10">
                                 <StackPanel>
-                                    <TextBlock Text="当前课程" Style="{StaticResource MetricLabelStyle}"/>
+                                    <TextBlock Text="当前课程" Style="{StaticResource DarkLabelStyle}"/>
                                     <TextBlock x:Name="CurrentCourseText" Text="-" TextWrapping="Wrap"
-                                               FontSize="14" FontWeight="SemiBold" Margin="0,5,0,12"/>
-                                    <TextBlock Text="当前章节" Style="{StaticResource MetricLabelStyle}"/>
+                                               FontSize="14" FontWeight="SemiBold" Margin="0,5,0,12" Foreground="#F0FFFC"/>
+                                    <TextBlock Text="当前章节" Style="{StaticResource DarkLabelStyle}"/>
                                     <TextBlock Text="{Binding CurrentChapterText}" TextWrapping="Wrap"
-                                               FontSize="13" Margin="0,5,0,12" Foreground="{DynamicResource SecondaryTextBrush}"/>
-                                    <TextBlock Text="当前视频" Style="{StaticResource MetricLabelStyle}"/>
+                                               FontSize="13" Margin="0,5,0,12" Foreground="#C1DDE4"/>
+                                    <TextBlock Text="当前视频" Style="{StaticResource DarkLabelStyle}"/>
                                     <TextBlock Text="{Binding CurrentVideoText}" TextWrapping="Wrap"
-                                               FontSize="13" Margin="0,5,0,0" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                               FontSize="13" Margin="0,5,0,0" Foreground="#C1DDE4"/>
                                 </StackPanel>
                             </Border>
 
-                            <Border Style="{StaticResource SubtleCardBorderStyle}" Padding="14" Margin="0,0,0,10">
+                            <Border Style="{StaticResource DarkPanelStyle}" Padding="14" Margin="0,0,0,10">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
@@ -408,7 +579,7 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <TextBlock Text="播放时间" Style="{StaticResource MetricLabelStyle}"/>
+                                    <TextBlock Text="播放时间" Style="{StaticResource DarkLabelStyle}"/>
 
                                     <Border Grid.Column="1"
                                             Background="{DynamicResource AccentSoftBrush}"
@@ -435,19 +606,19 @@
                                                    FontFamily="Consolas"
                                                    FontSize="23"
                                                    FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                                   Foreground="#F0FFFC"/>
                                     </Viewbox>
                                 </Grid>
                             </Border>
 
-                            <Border Style="{StaticResource SubtleCardBorderStyle}" Padding="14" Margin="0,0,0,10">
+                            <Border Style="{StaticResource DarkPanelStyle}" Padding="14" Margin="0,0,0,10">
                                 <StackPanel>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="播放进度" Style="{StaticResource MetricLabelStyle}"/>
+                                        <TextBlock Text="播放进度" Style="{StaticResource DarkLabelStyle}"/>
                                         <TextBlock Grid.Column="1" Text="{Binding ProgressPercent, StringFormat={}{0:F0}%}"
                                                    FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
                                     </Grid>
@@ -455,16 +626,16 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Style="{StaticResource SubtleCardBorderStyle}" Padding="14" Margin="0,0,0,10">
+                            <Border Style="{StaticResource DarkPanelStyle}" Padding="14" Margin="0,0,0,10">
                                 <StackPanel>
                                     <TextBlock Text="下一视频" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
-                                    <TextBlock Text="{Binding NextVideoText}" TextWrapping="Wrap" FontSize="13.5" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                                    <TextBlock Text="{Binding NextVideoText}" TextWrapping="Wrap" FontSize="13.5" FontWeight="SemiBold" Margin="0,6,0,0" Foreground="#F0FFFC"/>
                                     <Grid Margin="0,10,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="网络状态" Style="{StaticResource MetricLabelStyle}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="网络状态" Style="{StaticResource DarkLabelStyle}" VerticalAlignment="Center"/>
                                         <Border Grid.Column="1" Background="#1D1C543D" BorderBrush="#553DDC97" BorderThickness="1" CornerRadius="10" Padding="8,3">
                                             <TextBlock Text="{Binding NetworkText}" FontSize="10" Foreground="{DynamicResource SuccessBrush}"/>
                                         </Border>
@@ -494,17 +665,18 @@
                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
                                     <StackPanel Grid.Column="1">
-                                        <TextBlock Text="安全保护已开启" FontWeight="SemiBold" FontSize="12.5"/>
+                                        <TextBlock Text="安全保护已开启" FontWeight="SemiBold" FontSize="12.5"
+                                                   Foreground="#F0FFFC"/>
                                         <TextBlock Text="默认在视频自然结束后切换下一章节并延续播放/倍速；验证码、人脸、风控或学校认证页面仍会暂停辅助流程。"
                                                    TextWrapping="Wrap" LineHeight="18" FontSize="10.5" Margin="0,4,0,0"
-                                                   Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                                   Foreground="#9EC8CE"/>
                                     </StackPanel>
                                 </Grid>
                             </Border>
 
                             <StackPanel x:Name="DeveloperPanel" Visibility="Collapsed" Margin="0,4,0,0">
                                 <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="0,4,0,12"/>
-                                <TextBlock Text="开发者诊断" Style="{StaticResource EyebrowTextStyle}"/>
+                                <TextBlock Text="详细日志" Style="{StaticResource SectionTitleStyle}"/>
                                 <Border Style="{StaticResource SubtleCardBorderStyle}" Padding="12" Margin="0,8,0,0">
                                     <StackPanel>
                                         <TextBlock x:Name="DevUrlText" TextWrapping="Wrap" FontFamily="Consolas" FontSize="10.5" Foreground="{DynamicResource SecondaryTextBrush}"/>
@@ -525,11 +697,11 @@
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Ellipse Width="6" Height="6" Fill="{DynamicResource AccentBrush}" Margin="0,0,8,0"/>
                         <TextBlock x:Name="BottomHintText"
-                                   Text="章节只有在播放器真实切换后才会高亮；F11 为非全屏宽屏观看。"
+                                   Text="章节只有在播放器真实切换后才会高亮；F11 可进入全屏网页观看。"
                                    FontSize="10.5" Foreground="{DynamicResource SecondaryTextBrush}"/>
                     </StackPanel>
                     <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center"
-                               Text="数据仅保存在本机"
+                               Text="日志可用于问题反馈"
                                FontSize="10" Foreground="{DynamicResource TertiaryTextBrush}"/>
                 </DockPanel>
             </Border>

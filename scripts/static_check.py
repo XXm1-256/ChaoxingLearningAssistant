@@ -102,15 +102,15 @@ if app_xaml.exists():
         'x:Key="PrimaryButtonStyle"',
         'x:Key="GradientButtonStyle"',
         'x:Key="CardBorderStyle"',
-        'Color="#EEF6F0"',
-        'Color="#CDE1D4"',
+        'Color="#EAF7F8"',
+        'Color="#B8DDE1"',
     )
     for token in required_ui_tokens:
         if token not in ui:
             errors.append(f"UI-REV regression: missing visual-system token {token}")
 if main_xaml.exists():
     main_ui = main_xaml.read_text(encoding="utf-8", errors="ignore")
-    for token in ('学习通课程播放辅助', '播放信息', 'HeroGradientBrush', 'GradientButtonStyle'):
+    for token in ('学习通课程视频播放助手', '运行状态', 'HeroGradientBrush', 'GradientButtonStyle'):
         if token not in main_ui:
             errors.append(f"UI-REV regression: MainWindow missing {token}")
 
@@ -127,15 +127,15 @@ if app_xaml.exists():
         if count != 1:
             errors.append(f"UI-REV regression: expected exactly one implicit {target} style, found {count}")
 
-launcher = ROOT / "BUILD_V1_32.bat"
+launcher = ROOT / "BUILD_V1_34.bat"
 if not launcher.exists():
-    errors.append("Missing BUILD_V1_32.bat")
+    errors.append("Missing BUILD_V1_33.bat")
 else:
     raw = launcher.read_bytes()
     if raw.startswith(b"\xef\xbb\xbf") or any(ch >= 128 for ch in raw):
-        errors.append("BUILD_V1_32.bat must remain ASCII/no-BOM")
-    if b"Build v1.32" not in raw:
-        errors.append("BUILD_V1_32.bat version banner mismatch")
+        errors.append("BUILD_V1_34.bat must remain ASCII/no-BOM")
+    if b"Build v1.34" not in raw:
+        errors.append("BUILD_V1_34.bat version banner mismatch")
 
 
 # v1.10 real-runtime UI acceptance regression guards.
@@ -193,11 +193,11 @@ if main_xaml.exists():
             errors.append("ERR-RUNTIME-001 regression: ProgressPercent ProgressBar binding must be Mode=OneWay")
 
 
-launcher_v112 = ROOT / "BUILD_V1_32.bat"
+launcher_v112 = ROOT / "BUILD_V1_34.bat"
 if launcher_v112.exists():
     launcher_text_v112 = launcher_v112.read_text(encoding="ascii", errors="ignore")
-    if "Build Log v1.32" not in launcher_text_v112:
-        errors.append("VER-MGMT-002 regression: BUILD_LOG header must match v1.32")
+    if "Build Log v1.34" not in launcher_text_v112:
+        errors.append("VER-MGMT-002 regression: BUILD_LOG header must match v1.34")
 
 # v1.13: inspect XML attribute values rather than stopping at StringFormat's nested braces.
 for path in ROOT.rglob("*.xaml"):
@@ -215,8 +215,8 @@ for path in ROOT.rglob("*.xaml"):
                 errors.append(f"ERR-RUNTIME-002: display-only {tag}.{name} requires OneWay: {path.relative_to(ROOT)}")
 
 project_xml = ET.parse(ROOT / "src/ChaoxingLearningAssistant/ChaoxingLearningAssistant.csproj")
-if project_xml.findtext(".//Version") != "1.32.0":
-    errors.append("Project version must be 1.32.0")
+if project_xml.findtext(".//Version") != "1.34.0":
+    errors.append("Project version must be 1.34.0")
 
 # v1.14: chapter catalog, continuous playback, and login-stability guards.
 chapter_model = ROOT / "src/ChaoxingLearningAssistant/Models/ChapterItem.cs"
@@ -267,7 +267,7 @@ if main_cs.exists():
         errors.append("v1.15 regression: minimizing must not Hide the main taskbar window")
 
 
-# v1.16: non-fullscreen viewing mode, single-click chapter navigation, reliable unfinished-state priority,
+# v1.16+: viewing mode, single-click chapter navigation, reliable unfinished-state priority,
 # cleaner titles/course display, and ended-source replay guard.
 page_result = ROOT / "src/ChaoxingLearningAssistant/Chaoxing/PageRecognitionResult.cs"
 course_model = ROOT / "src/ChaoxingLearningAssistant/Models/CourseItem.cs"
@@ -288,7 +288,7 @@ for path, tokens in {
 
 if main_xaml.exists():
     main_ui_v116 = main_xaml.read_text(encoding="utf-8-sig", errors="ignore")
-    for token in ('PreviewMouseLeftButtonDown="ChapterList_PreviewMouseLeftButtonDown"', 'Click="JumpToUnfinished_Click"', '宽屏观看（非全屏，F11）', 'ProgressSummary'):
+    for token in ('PreviewMouseLeftButtonDown="ChapterList_PreviewMouseLeftButtonDown"', 'Click="JumpToUnfinished_Click"', '全屏观看（F11）', 'ProgressSummary'):
         if token not in main_ui_v116:
             errors.append(f"v1.16 UI regression: MainWindow missing {token}")
 
@@ -296,8 +296,10 @@ if main_cs.exists():
     main_code_v116 = main_cs.read_text(encoding="utf-8-sig", errors="ignore")
     compact = re.search(r"private void EnterCompactViewingMode\(\)([\s\S]*?)private void ExitCompactViewingMode", main_code_v116)
     if compact:
-        if "WindowStyle =" in compact.group(1) or "WindowState = WindowState.Maximized" in compact.group(1):
-            errors.append("v1.16 regression: compact viewing mode must remain non-fullscreen")
+        for token in ("WindowState = WindowState.Maximized", "LeftNavigationColumn.Width = new GridLength(0)",
+                      "BrowserHeaderRow.Height = new GridLength(0)", "BrowserFooterRow.Height = new GridLength(0)"):
+            if token not in compact.group(1):
+                errors.append(f"v1.34 regression: fullscreen viewing mode missing {token}")
     else:
         errors.append("v1.16 regression: EnterCompactViewingMode block missing")
 
@@ -399,13 +401,12 @@ for path in visible_xaml:
 if main_xaml.exists():
     ui_v119 = main_xaml.read_text(encoding="utf-8-sig", errors="ignore")
     for token in (
-        'Title="学习通课程播放辅助 v1.32"',
+        'Title="学习通课程视频播放助手 v1.34"',
         'Text="课程目录"',
-        'Text="播放信息"',
-        'Text="视频状态"',
+        'Text="运行状态"',
         'Text="下一视频"',
         'Text="安全保护已开启"',
-        'Text="开发者诊断"',
+        'Text="详细日志"',
     ):
         if token not in ui_v119:
             errors.append(f"v1.20 copy regression: MainWindow missing {token}")
@@ -732,57 +733,76 @@ if persistence_test.exists() and "[DataTestMethod]" in persistence_test.read_tex
     errors.append("WARN-TEST-001 regression: DataTestMethod is obsolete in current MSTest")
 
 
-# v1.32 inherits the v1.31 mist-green UI, tactile controls, feedback and tutorial.
+# v1.33 inherits the v1.31 mist-green UI, tactile controls, feedback and tutorial.
 app_xaml = ROOT / "src" / "ChaoxingLearningAssistant" / "App.xaml"
 main_xaml = ROOT / "src" / "ChaoxingLearningAssistant" / "Views" / "MainWindow.xaml"
 first_run_xaml = ROOT / "src" / "ChaoxingLearningAssistant" / "Views" / "FirstRunWindow.xaml"
 settings_xaml = ROOT / "src" / "ChaoxingLearningAssistant" / "Views" / "SettingsWindow.xaml"
 ui_guards = {
-    app_xaml: ('Color="#EEF6F0"', 'ScaleTransform ScaleX="0.95" ScaleY="0.95"', 'TranslateTransform Y="2"'),
+    app_xaml: ('Color="#EAF7F8"', 'ScaleTransform ScaleX="0.95" ScaleY="0.95"', 'TranslateTransform Y="2"'),
     main_xaml: ('Click="Tutorial_Click"', 'x:Name="InAppNotice"', 'x:Name="NoticeMessageText"'),
     first_run_xaml: ('Grid.Column="6"', 'Text="04"', 'Click="Close_Click"'),
     settings_xaml: ('Checked="Option_Changed"', 'Unchecked="Option_Changed"', 'x:Name="SettingsFeedback"'),
 }
 for path, tokens in ui_guards.items():
     if not path.exists():
-        errors.append(f"v1.32 regression: missing {path.relative_to(ROOT)}")
+        errors.append(f"v1.33 regression: missing {path.relative_to(ROOT)}")
         continue
     source = path.read_text(encoding="utf-8-sig", errors="ignore")
     for token in tokens:
         if token not in source:
-            errors.append(f"v1.32 regression: {path.name} missing {token}")
+            errors.append(f"v1.33 regression: {path.name} missing {token}")
 
 if main_cs.exists():
     main_code_v131 = main_cs.read_text(encoding="utf-8-sig", errors="ignore")
     for token in ('ShowInAppNotice(', 'Tutorial_Click(', 'new FirstRunWindow', 'nextTask?.DocumentUrl'):
         if token not in main_code_v131:
-            errors.append(f"v1.32 regression: MainWindow code missing {token}")
+            errors.append(f"v1.33 regression: MainWindow code missing {token}")
 
 restore_master = ROOT / "scripts" / "restore_master.py"
 if not restore_master.exists():
-    errors.append("v1.32 regression: restore_master.py is missing")
+    errors.append("v1.33 regression: restore_master.py is missing")
 else:
     restore_code = restore_master.read_text(encoding="utf-8-sig", errors="ignore")
-    for token in ("V1.32 SOURCE ZIP BASE64 BEGIN", "V1.32 SOURCE ZIP BASE64 END"):
+    for token in ("SOURCE ZIP BASE64 BEGIN", "SOURCE ZIP BASE64 END"):
         if token not in restore_code:
-            errors.append(f"v1.32 regression: restore script missing {token}")
+            errors.append(f"v1.33 regression: restore script missing {token}")
 
-for public_file in ("LICENSE", "CONTRIBUTING.md", "SECURITY.md", ".gitignore", "使用教学.html", "使用教学.md"):
+for public_file in ("LICENSE", "CONTRIBUTING.md", "SECURITY.md", ".gitignore", "使用教学.md", "使用教学.docx", "使用教学.pdf"):
     if not (ROOT / public_file).exists():
-        errors.append(f"v1.32 open-source regression: missing {public_file}")
+        errors.append(f"v1.33 open-source regression: missing {public_file}")
 
 github_workflow = ROOT / ".github" / "workflows" / "build.yml"
 release_packager = ROOT / "scripts" / "package_github_release.ps1"
 if not github_workflow.exists():
-    errors.append("v1.32 open-source regression: GitHub Actions workflow is missing")
+    errors.append("v1.33 open-source regression: GitHub Actions workflow is missing")
 if not release_packager.exists():
-    errors.append("v1.32 open-source regression: GitHub release packager is missing")
+    errors.append("v1.33 open-source regression: GitHub release packager is missing")
 
 if adapter_cs.exists():
     adapter_v132 = adapter_cs.read_text(encoding="utf-8-sig", errors="ignore")
     for token in ("targetNextDocumentUrl", "targetBlockMediaId", "nextDocumentUrl"):
         if token not in adapter_v132:
-            errors.append(f"v1.32 same-chapter iframe regression: adapter missing {token}")
+            errors.append(f"v1.33 same-chapter iframe regression: adapter missing {token}")
+    for token in ('"返回课程"', 'IsCourseNavigationLabel'):
+        if token not in adapter_v132:
+            errors.append(f"v1.33 course-list regression: adapter missing {token}")
+
+# v1.34 fixes false course cards, adds live next-video previews and restores the approved visual structure.
+next_preview = ROOT / "src/ChaoxingLearningAssistant/Services/NextVideoPreviewResolver.cs"
+for path, tokens in {
+    adapter_cs: ("directLabel", "返回课程", ".course-title"),
+    main_cs: ("SyncCurrentCourseCard", "NextVideoPreviewResolver.Resolve", "等待视频载入"),
+    next_preview: ("TaskType.Quiz", "FormatTask", "NoNextText"),
+    main_xaml: ("DarkPanelStyle", "StatusRotor", "学习通课程视频播放助手", "按课程顺序识别"),
+}.items():
+    if not path.exists():
+        errors.append(f"v1.34 regression: missing {path.relative_to(ROOT)}")
+        continue
+    source = path.read_text(encoding="utf-8-sig", errors="ignore")
+    for token in tokens:
+        if token not in source:
+            errors.append(f"v1.34 regression: {path.name} missing {token}")
 
 
 if errors:

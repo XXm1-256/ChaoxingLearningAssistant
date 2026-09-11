@@ -45,10 +45,10 @@ public sealed class ChaoxingAdapter : IDisposable
 (() => {
   const normalize = s => (s || '').replace(/\s+/g,' ').trim();
   const clean = raw => normalize(raw)
-    .replace(/^(进入|打开|查看|开始|继续)\s*(课程|学习)\s*[:：-]?\s*/i, '')
-    .replace(/\s*(进入课程|开始学习|继续学习|查看课程)\s*$/i, '')
+    .replace(/^(进入|打开|查看|开始|继续|返回)\s*(课程|学习)\s*[:：-]?\s*/i, '')
+    .replace(/\s*(进入课程|开始学习|继续学习|查看课程|返回课程)\s*$/i, '')
     .trim();
-  const generic = s => /^(课程|进入课程|打开课程|查看课程|学习|开始学习|继续学习|详情)$/i.test(normalize(s));
+  const generic = s => /^(课程|我的课程|课程首页|返回|返回课程|进入课程|打开课程|查看课程|学习|开始学习|继续学习|详情)$/i.test(normalize(s));
   const courseIdOf = href => {
     try {
       const u = new URL(href, location.href);
@@ -63,6 +63,8 @@ public sealed class ChaoxingAdapter : IDisposable
   const seen = new Set();
   const anchors = Array.from(document.querySelectorAll('a[href]'));
   for (const a of anchors) {
+    const directLabel = normalize(a.getAttribute?.('title') || a.innerText || a.textContent);
+    if (/^(?:返回|返回课程|课程首页|我的课程)$/i.test(directLabel)) continue;
     let href = '';
     try { href = new URL(a.href || a.getAttribute?.('href') || '', location.href).href; } catch { continue; }
     const low = href.toLowerCase();
@@ -71,14 +73,14 @@ public sealed class ChaoxingAdapter : IDisposable
                         low.includes('mycourse');
     if (!looksCourse) continue;
 
-    const card = a.closest?.('li,.course,.course-item,.courseItem,.courseList,.course-list-item,.courseInfo,.course-info,.content') || a.parentElement || a;
+    const card = a.closest?.('li,.course,.course-item,.courseItem,.courseList,.course-list-item,.courseInfo,.course-info') || a;
     const candidates = [
       a.getAttribute?.('title'),
       a.innerText,
       a.textContent,
       card?.querySelector?.('[data-course-name]')?.getAttribute?.('data-course-name'),
-      card?.querySelector?.('.course-name,.courseName,.coursename,.course_name,.course-title,.courseTitle,h3,h4,[title]')?.getAttribute?.('title'),
-      card?.querySelector?.('.course-name,.courseName,.coursename,.course_name,.course-title,.courseTitle,h3,h4')?.innerText
+      card?.querySelector?.('.course-name,.courseName,.coursename,.course_name,.course-title,.courseTitle')?.getAttribute?.('title'),
+      card?.querySelector?.('.course-name,.courseName,.coursename,.course_name,.course-title,.courseTitle')?.innerText
     ].map(clean).filter(x => x && x.length >= 2 && x.length <= 120 && !generic(x));
     const title = candidates[0] || '';
     if (!title) continue;
@@ -95,7 +97,9 @@ public sealed class ChaoxingAdapter : IDisposable
         var dto = await ExecuteAcrossDocumentsAsync<List<CourseDto>>(script);
         var courses = dto
             .SelectMany(x => x)
-            .Where(x => !string.IsNullOrWhiteSpace(x.Title) && Uri.TryCreate(x.Url, UriKind.Absolute, out _))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Title) &&
+                        !IsCourseNavigationLabel(x.Title) &&
+                        Uri.TryCreate(x.Url, UriKind.Absolute, out _))
             .GroupBy(x => GetCourseIdentity(x.Url), StringComparer.OrdinalIgnoreCase)
             .Select(g => g.OrderBy(x => x.Title.Length).First())
             .Select(x => new CourseItem { Title = x.Title.Trim(), Url = x.Url })
@@ -103,6 +107,14 @@ public sealed class ChaoxingAdapter : IDisposable
 
         _logger.Info("CX-COURSE-SCAN", $"课程候选识别数量：{courses.Length}");
         return courses;
+    }
+
+    private static bool IsCourseNavigationLabel(string? title)
+    {
+        var text = title?.Trim();
+        return text is "课程" or "我的课程" or "课程首页" or "返回" or "返回课程" or
+            "进入课程" or "打开课程" or "查看课程" or "学习" or "开始学习" or
+            "继续学习" or "详情";
     }
 
     public async Task<IReadOnlyList<ChapterItem>> ScanChaptersAsync()
