@@ -34,7 +34,7 @@
 
 修复后 Release 编译达到 0 warning / 0 error，MSTest 32/32、Node 适配器 47/47、静态检查与隐私扫描全部通过。最终 ZIP 顶层只有两份教学和一个中文次级文件夹；从该 ZIP 实际解压的 EXE 启动 5 秒保持运行。安装器因没有 Inno Setup 6 明确记为 SKIPPED。
 
-最终交付严格只有两份面向本轮的 ZIP：`ChaoxingLearningAssistant_v1.32_Windows.zip` 是将上传 GitHub Release 的用户版，不含开发归档；`ChaoxingLearningAssistant_v1.32_Developer.zip` 是开发者版，包含源码、累计 MASTER、错误档案、测试报告和历版 Release。
+最终交付严格只有两份面向本轮的 ZIP：`ChaoxingLearningAssistant_v1.32_Windows.zip` 已上传 GitHub Release，作为不含开发归档的用户版；`ChaoxingLearningAssistant_v1.32_Developer.zip` 是本地交付的开发者版，包含源码、累计 MASTER、错误档案、测试报告和历版 Release，未上传 GitHub。公开仓库与下载页分别是 `https://github.com/XXm1-256/ChaoxingLearningAssistant` 和 `https://github.com/XXm1-256/ChaoxingLearningAssistant/releases/tag/v1.32`；仓库简介只介绍功能与使用，不写审美设计。
 
 ## 安全与边界
 

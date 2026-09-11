@@ -13,7 +13,7 @@
 - 开发者版归档完整性：PASS；包含累计 MASTER、错误档案、测试报告、v1.25-v1.32 Release 和完整源码。
 - 下载包解压启动：PASS；从实际 ZIP 解压后的 EXE 隐藏启动 5 秒保持运行，随后由测试流程关闭。
 - 安装器：SKIPPED，本机未安装 Inno Setup 6；GitHub 自包含 ZIP 不受影响。
-- GitHub 公开仓库与 Release：等待本地验证全部通过后上传。
+- GitHub 公开仓库与 Release：PASS；源码已推送到 `https://github.com/XXm1-256/ChaoxingLearningAssistant`，v1.32 Release 已发布到 `https://github.com/XXm1-256/ChaoxingLearningAssistant/releases/tag/v1.32`。发布页只手动上传用户版 `ChaoxingLearningAssistant_v1.32_Windows.zip`；开发者版未上传。仓库简介已改为纯功能说明，不含审美宣传。
 - 真实课程全程连续播放：NOT RUN，不以发布成功代替平台实测。
 - 同章多视频真实问题课程：AWAITING USER VALIDATION；自动化已覆盖失败结构，但仍需原课程自然结束复测。
 
