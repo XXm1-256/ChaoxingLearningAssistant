@@ -608,10 +608,12 @@ public partial class MainWindow : Window
 
             if (_vm.Courses.Count == 0)
             {
-                var discovered = await _adapter.ScanCoursesAsync();
+                var discovered = await ScanCoursesWithRetryAsync(pageVersion, attempts: 3);
                 if (!IsCurrentPage(pageVersion)) return;
                 foreach (var course in discovered)
                     _vm.Courses.Add(course);
+                if (discovered.Count > 0)
+                    _courseCacheService.Save(_vm.Courses);
             }
 
             if (_vm.SelectedCourse is not null)
@@ -636,7 +638,7 @@ public partial class MainWindow : Window
             return;
 
         var pageVersion = _pageVersion;
-        var courses = await _adapter.ScanCoursesAsync();
+        var courses = await ScanCoursesWithRetryAsync(pageVersion, attempts: showMessage ? 3 : 1);
         if (!IsCurrentPage(pageVersion)) return;
         if (courses.Count > 0)
         {
@@ -658,6 +660,27 @@ public partial class MainWindow : Window
             else
                 NotifyUser("课程识别", $"识别到 {courses.Count} 个课程候选。", false);
         }
+    }
+
+    private async Task<IReadOnlyList<CourseItem>> ScanCoursesWithRetryAsync(int pageVersion, int attempts)
+    {
+        if (_adapter is null)
+            return Array.Empty<CourseItem>();
+
+        IReadOnlyList<CourseItem> courses = Array.Empty<CourseItem>();
+        for (var attempt = 0; attempt < Math.Max(1, attempts); attempt++)
+        {
+            if (attempt > 0)
+                await Task.Delay(700);
+            if (!IsCurrentPage(pageVersion) || _adapter is null)
+                return Array.Empty<CourseItem>();
+
+            courses = await _adapter.ScanCoursesAsync();
+            if (courses.Count > 0)
+                break;
+        }
+
+        return courses;
     }
 
     private async Task RefreshChaptersInternalAsync(bool silent, PlayerSnapshot? playerEvidence = null, bool preserveSelection = true)
@@ -2804,6 +2827,9 @@ public partial class MainWindow : Window
     private void ToggleViewingMode_Click(object sender, RoutedEventArgs e)
         => ToggleCompactViewingMode();
 
+    private void ExitFullscreen_Click(object sender, RoutedEventArgs e)
+        => ExitCompactViewingMode();
+
     private void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key == Key.F11)
@@ -2847,7 +2873,8 @@ public partial class MainWindow : Window
         LeftWorkspaceSplitter.Visibility = Visibility.Collapsed;
         BrowserToolbar.Visibility = Visibility.Collapsed;
         BrowserFooterDashboard.Visibility = Visibility.Collapsed;
-        TopCommandRow.Height = new GridLength(0);
+        FullscreenExitBar.Visibility = Visibility.Visible;
+        TopCommandRow.Height = new GridLength(46);
         FooterRow.Height = new GridLength(0);
         BrowserHeaderRow.Height = new GridLength(0);
         BrowserFooterRow.Height = new GridLength(0);
@@ -2885,6 +2912,7 @@ public partial class MainWindow : Window
         BrowserHeaderRow.Height = new GridLength(96);
         BrowserFooterRow.Height = new GridLength(132);
         TopCommandDeck.Visibility = Visibility.Visible;
+        FullscreenExitBar.Visibility = Visibility.Collapsed;
         FooterBar.Visibility = Visibility.Visible;
         LeftNavigationCard.Visibility = Visibility.Visible;
         LeftWorkspaceSplitter.Visibility = Visibility.Visible;
@@ -3054,7 +3082,7 @@ public partial class MainWindow : Window
     private void ShowFromTray()
     {
         Show();
-        WindowState = WindowState.Normal;
+        WindowState = _compactViewingMode ? WindowState.Maximized : WindowState.Normal;
         Activate();
         Topmost = true;
         Topmost = false;

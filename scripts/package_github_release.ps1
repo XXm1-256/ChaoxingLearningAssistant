@@ -6,12 +6,15 @@ $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 $Publish = Join-Path $Root 'artifacts\publish\win-x64'
 $Stage = Join-Path $Root ('artifacts\github-release-' + [Guid]::NewGuid().ToString('N'))
-$ProgramFolderName = -join @(0x5B66,0x4E60,0x901A,0x8BFE,0x7A0B,0x64AD,0x653E,0x8F85,0x52A9 | ForEach-Object { [char]$_ })
+$ProgramFolderName = -join @(0x5B66,0x4E60,0x901A,0x8BFE,0x7A0B,0x89C6,0x9891,0x64AD,0x653E,0x52A9,0x624B | ForEach-Object { [char]$_ })
 $Program = Join-Path $Stage $ProgramFolderName
-$Destination = Join-Path $OutputDirectory 'ChaoxingLearningAssistant_v1.32_Windows.zip'
-$TutorialHtml = Get-ChildItem -LiteralPath $Root -Filter '*.html' -File | Select-Object -First 1
-if (-not $TutorialHtml) { throw 'Tutorial HTML is missing.' }
-$TutorialMarkdown = Join-Path $Root ([System.IO.Path]::ChangeExtension($TutorialHtml.Name, '.md'))
+$Destination = Join-Path $OutputDirectory 'ChaoxingLearningAssistant_v1.35_Windows.zip'
+$TutorialMarkdown = Join-Path $Root '使用教学.md'
+$TutorialDocx = Join-Path $Root '使用教学.docx'
+$TutorialPdf = Join-Path $Root '使用教学.pdf'
+foreach ($tutorial in @($TutorialMarkdown, $TutorialDocx, $TutorialPdf)) {
+    if (-not (Test-Path -LiteralPath $tutorial)) { throw "Tutorial file is missing: $tutorial" }
+}
 
 if (-not (Test-Path -LiteralPath (Join-Path $Publish 'ChaoxingLearningAssistant.exe'))) {
     throw 'Run BUILD_FULL.bat first; self-contained win-x64 output is missing.'
@@ -19,8 +22,9 @@ if (-not (Test-Path -LiteralPath (Join-Path $Publish 'ChaoxingLearningAssistant.
 
 New-Item -ItemType Directory -Path $Program -Force | Out-Null
 try {
-    Copy-Item -LiteralPath $TutorialHtml.FullName -Destination $Stage
     Copy-Item -LiteralPath $TutorialMarkdown -Destination $Stage
+    Copy-Item -LiteralPath $TutorialDocx -Destination $Stage
+    Copy-Item -LiteralPath $TutorialPdf -Destination $Stage
     Get-ChildItem -LiteralPath $Publish | Where-Object {
         $_.Name -notin @('Data', 'WebView2', 'Logs', 'Diagnostics', 'portable.flag')
     } | Copy-Item -Destination $Program -Recurse -Force
@@ -29,9 +33,10 @@ try {
     if (Test-Path -LiteralPath $Destination) {
         Remove-Item -LiteralPath $Destination -Force
     }
-    $TutorialHtmlStage = Join-Path $Stage $TutorialHtml.Name
     $TutorialMarkdownStage = Join-Path $Stage ([System.IO.Path]::GetFileName($TutorialMarkdown))
-    Compress-Archive -LiteralPath $TutorialHtmlStage,$TutorialMarkdownStage,$Program -DestinationPath $Destination -CompressionLevel Optimal
+    $TutorialDocxStage = Join-Path $Stage ([System.IO.Path]::GetFileName($TutorialDocx))
+    $TutorialPdfStage = Join-Path $Stage ([System.IO.Path]::GetFileName($TutorialPdf))
+    Compress-Archive -LiteralPath $TutorialMarkdownStage,$TutorialDocxStage,$TutorialPdfStage,$Program -DestinationPath $Destination -CompressionLevel Optimal
 }
 finally {
     if (Test-Path -LiteralPath $Stage) {

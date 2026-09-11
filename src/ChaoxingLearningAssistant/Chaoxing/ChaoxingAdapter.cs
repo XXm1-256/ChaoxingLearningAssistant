@@ -73,14 +73,14 @@ public sealed class ChaoxingAdapter : IDisposable
                         low.includes('mycourse');
     if (!looksCourse) continue;
 
-    const card = a.closest?.('li,.course,.course-item,.courseItem,.courseList,.course-list-item,.courseInfo,.course-info') || a;
+    const card = a.closest?.('[data-courseid],[data-course-id],li,.course,.course-item,.courseItem,.course-card,.courseCard,.courseList,.course-list,.course-list-item,.courseInfo,.course-info,.Mconright') || a;
     const candidates = [
       a.getAttribute?.('title'),
       a.innerText,
       a.textContent,
       card?.querySelector?.('[data-course-name]')?.getAttribute?.('data-course-name'),
-      card?.querySelector?.('.course-name,.courseName,.coursename,.course_name,.course-title,.courseTitle')?.getAttribute?.('title'),
-      card?.querySelector?.('.course-name,.courseName,.coursename,.course_name,.course-title,.courseTitle')?.innerText
+      card?.querySelector?.('.course-name,.courseName,.coursename,.course_name,.course-title,.courseTitle,.course-name-box,.ktmc,.name,.title')?.getAttribute?.('title'),
+      card?.querySelector?.('.course-name,.courseName,.coursename,.course_name,.course-title,.courseTitle,.course-name-box,.ktmc,.name,.title')?.innerText
     ].map(clean).filter(x => x && x.length >= 2 && x.length <= 120 && !generic(x));
     const title = candidates[0] || '';
     if (!title) continue;
@@ -90,6 +90,37 @@ public sealed class ChaoxingAdapter : IDisposable
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({ title, url: href });
+  }
+
+  // Some course-home variants keep course/class ids in the card and use a
+  // JavaScript-only button. Build the same ordinary study URL from those ids.
+  const cards = Array.from(document.querySelectorAll('[data-courseid],[data-course-id],li'));
+  for (const card of cards) {
+    const courseInput = card.querySelector?.('input[name="courseId"],input[name="courseid"]');
+    const courseId = normalize(card.getAttribute?.('data-courseid') || card.getAttribute?.('data-course-id') ||
+                               courseInput?.value || courseInput?.getAttribute?.('value'));
+    if (!courseId) continue;
+    const classInput = card.querySelector?.('input[name="classId"],input[name="clazzid"],input[name="jclassId"]');
+    const classId = normalize(card.getAttribute?.('data-classid') || card.getAttribute?.('data-clazzid') ||
+                              classInput?.value || classInput?.getAttribute?.('value'));
+    const titleNode = card.querySelector?.('[data-course-name],.course-name,.courseName,.coursename,.course_name,.course-title,.courseTitle,.course-name-box,.ktmc,.name,.title');
+    const title = [
+      card.getAttribute?.('data-course-name'),
+      titleNode?.getAttribute?.('data-course-name'),
+      titleNode?.getAttribute?.('title'),
+      titleNode?.innerText,
+      titleNode?.textContent
+    ].map(clean).find(x => x && x.length >= 2 && x.length <= 120 && !generic(x)) || '';
+    if (!title) continue;
+
+    const key = `id:${courseId}`;
+    if (seen.has(key)) continue;
+    const host = /(^|\.)mooc[^.]*\.chaoxing\.com$/i.test(location.hostname || '')
+      ? location.origin : 'https://mooc1.chaoxing.com';
+    const query = new URLSearchParams({ courseId });
+    if (classId) query.set('clazzid', classId);
+    seen.add(key);
+    out.push({ title, url: `${host}/mycourse/studentcourse?${query}` });
   }
   return out.slice(0, 200);
 })()

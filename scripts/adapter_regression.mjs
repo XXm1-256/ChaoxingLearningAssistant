@@ -92,6 +92,46 @@ test('course scanner does not turn a nearby 提示 heading into a course', () =>
 
   assert.equal(result.length, 0);
 });
+
+test('course scanner reads a title node from newer course-card markup', () => {
+  const title = { innerText: '大学语文', getAttribute: key => key === 'title' ? '大学语文' : '' };
+  const card = { querySelector: selector => selector.includes('.title') ? title : null };
+  const course = {
+    href: 'https://mooc1.chaoxing.com/mycourse/studentcourse?courseId=course-c',
+    innerText: '进入课程', textContent: '进入课程', parentElement: card,
+    getAttribute: () => '', closest: () => card,
+  };
+  const result = vm.runInNewContext(script('ScanCoursesAsync'), {
+    document: { querySelectorAll: () => [course] },
+    location: { href: 'https://mooc1.chaoxing.com/visit/courses' }, URL,
+  }, { timeout: 1000 });
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].title, '大学语文');
+});
+
+test('course scanner recovers cards that expose ids but only use a JavaScript button', () => {
+  const title = { innerText: '外国文学', textContent: '外国文学', getAttribute: () => '' };
+  const courseInput = { value: 'course-d', getAttribute: () => 'course-d' };
+  const classInput = { value: 'class-d', getAttribute: () => 'class-d' };
+  const card = {
+    getAttribute: () => '',
+    querySelector: selector => selector.includes('input[name="courseId"') ? courseInput
+      : selector.includes('input[name="classId"') ? classInput
+      : selector.includes('.course-name') ? title : null,
+  };
+  const result = vm.runInNewContext(script('ScanCoursesAsync'), {
+    document: { querySelectorAll: selector => selector === 'a[href]' ? [] : [card] },
+    location: {
+      href: 'https://i.chaoxing.com/base', hostname: 'i.chaoxing.com', origin: 'https://i.chaoxing.com'
+    }, URL, URLSearchParams,
+  }, { timeout: 1000 });
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].title, '外国文学');
+  assert.match(result[0].url, /courseId=course-d/);
+  assert.match(result[0].url, /clazzid=class-d/);
+});
 for (const [status, completed] of [
   ['未完成', false], ['未看完', false], ['not completed', false], ['unfinished', false],
   ['已完成', true], ['已看完', true], ['completed', true], ['完成度 0%', false],
