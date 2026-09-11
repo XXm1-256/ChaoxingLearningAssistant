@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <UseWPF>true</UseWPF>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="MSTest.TestAdapter" Version="3.10.2" />
+    <PackageReference Include="MSTest.TestFramework" Version="3.10.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ChaoxingLearningAssistant\ChaoxingLearningAssistant.csproj" />
+    <EmbeddedResource Include="..\..\src\ChaoxingLearningAssistant\Views\MainWindow.xaml" LogicalName="CourseUiUnderTest.xaml" />
+  </ItemGroup>
+</Project>

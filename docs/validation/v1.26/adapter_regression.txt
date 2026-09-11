@@ -1,0 +1,5 @@
+Node adapter regression: PASS
+Tests: 42
+Passed: 42
+Failed: 0
+Duration: approximately 164 ms

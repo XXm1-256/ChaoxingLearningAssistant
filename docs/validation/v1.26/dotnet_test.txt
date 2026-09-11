@@ -1,0 +1,14 @@
+Windows .NET validation
+.NET SDK: 8.0.424
+MSBuild: 17.11.48
+VSTest: 17.11.1 x64
+
+Restore: PASS
+Release Build: PASS
+Warnings: 0
+Errors: 0
+MSTest: PASS
+Passed: 29
+Failed: 0
+Skipped: 0
+Total: 29

@@ -1,0 +1,27 @@
+# Build outputs
+bin/
+obj/
+artifacts/
+Installer/Output/
+
+# Runtime data and diagnostics
+Data/
+Logs/
+Diagnostics/
+WebView2/
+*.log
+BUILD_LOG.txt
+
+# Generated release packages
+*.zip
+ChaoxingLearningAssistant_MASTER_v*.txt
+SOURCE_SHA256.json
+
+# IDE and OS files
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+.DS_Store
+Thumbs.db

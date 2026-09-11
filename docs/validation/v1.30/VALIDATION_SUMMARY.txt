@@ -1,0 +1,18 @@
+Chaoxing Learning Assistant v1.30 validation
+Date: 2026-09-11
+
+PASS:
+- Release build: 0 warnings, 0 errors
+- MSTest: 32/32
+- Node adapter regression: 46/46
+- Static regression check
+- Quick-run publish
+- Self-contained win-x64 publish
+- Portable ZIP
+
+SKIPPED:
+- Installer (Inno Setup 6 not installed)
+
+NOT RUN:
+- Full real-account course traversal through multiple no-video chapters
+- Long-duration completion audit on school-specific templates

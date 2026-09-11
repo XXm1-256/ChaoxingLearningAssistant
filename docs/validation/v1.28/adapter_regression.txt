@@ -1,0 +1,6 @@
+Command: node --test scripts/adapter_regression.mjs
+Result: PASS
+Tests: 45
+Passed: 45
+Failed: 0
+Added: skip assessment between videos; refuse generic next-chapter control

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>学习通课程播放辅助 v1.32 · 使用教学</title>
+  <style>
+    :root{--bg:#eef6f0;--paper:#fbfefc;--ink:#183126;--muted:#587064;--line:#cde1d4;--mint:#3d9b67;--soft:#d8f0e1;--warn:#fff4ce;--danger:#c9384e}
+    *{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 15% 0,#d8f0e1 0,transparent 34%),linear-gradient(135deg,#eef6f0,#f7fbf8);color:var(--ink);font:16px/1.7 "Microsoft YaHei UI","Microsoft YaHei",sans-serif}
+    .wrap{max-width:1060px;margin:auto;padding:42px 22px 70px}.hero,.card{background:rgba(251,254,252,.92);border:1px solid var(--line);box-shadow:0 18px 50px rgba(31,90,57,.10);border-radius:24px}.hero{padding:38px;display:grid;grid-template-columns:1.25fr .75fr;gap:28px;overflow:hidden;position:relative}.hero:after{content:"";position:absolute;width:260px;height:260px;border-radius:50%;right:-90px;top:-100px;background:linear-gradient(135deg,rgba(61,155,103,.24),rgba(115,201,152,.04))}
+    h1{font-size:38px;line-height:1.2;margin:0 0 15px}.tag{display:inline-block;background:var(--soft);color:#23754b;border:1px solid #b8ddc7;border-radius:999px;padding:5px 13px;font-weight:700}.lead{font-size:18px;color:var(--muted)}.mock{min-height:230px;border-radius:20px;background:#173629;padding:18px;box-shadow:inset 0 0 0 1px #38634e;position:relative;z-index:1}.mock-top{height:22px;border-radius:8px;background:#234b39;margin-bottom:13px}.mock-body{display:grid;grid-template-columns:28% 1fr 26%;gap:10px;height:155px}.pane{border-radius:12px;background:#eef6f0}.pane:nth-child(2){background:linear-gradient(145deg,#244c3a,#12291f);position:relative}.pane:nth-child(2):after{content:"▶";position:absolute;inset:0;display:grid;place-items:center;color:#8bdcb0;font-size:42px}.pulse{margin-top:12px;height:13px;border-radius:8px;background:linear-gradient(90deg,#62d18e 65%,#284638 65%)}
+    h2{font-size:26px;margin:46px 0 16px}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card{padding:22px}.num{width:42px;height:42px;border-radius:13px;background:var(--soft);display:grid;place-items:center;color:#23754b;font-weight:800}.card h3{margin:14px 0 6px}.card p{margin:0;color:var(--muted)}
+    .flow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.flow span{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:13px 16px;box-shadow:0 8px 20px rgba(31,90,57,.07)}.flow b{color:var(--mint);font-size:22px}.notice{margin-top:22px;padding:18px 20px;border-left:5px solid var(--mint);background:var(--soft);border-radius:14px}.warn{border-left-color:#d19a22;background:var(--warn)}.footer{margin-top:42px;text-align:center;color:var(--muted);font-size:14px}
+    @media(max-width:760px){.hero{grid-template-columns:1fr}.steps{grid-template-columns:1fr}h1{font-size:30px}}
+  </style>
+</head>
+<body><main class="wrap">
+  <section class="hero"><div><span class="tag">同学们好 · 使用教学</span><h1>先看教学，再打开程序</h1><p class="lead">这是一款学习通网页播放辅助工具。它会根据网页里的真实视频帮助切换和播放，不会修改平台成绩或伪造学习结果。</p><p><strong>程序位置：</strong>打开同目录的“学习通课程播放辅助”文件夹，再双击里面的程序。</p></div><div class="mock" aria-label="程序界面示意图"><div class="mock-top"></div><div class="mock-body"><div class="pane"></div><div class="pane"></div><div class="pane"></div></div><div class="pulse"></div></div></section>
+  <h2>六步开始使用</h2><section class="steps">
+    <article class="card"><div class="num">01</div><h3>完整解压</h3><p>不要直接在压缩包里运行。先右键解压到一个新文件夹。</p></article>
+    <article class="card"><div class="num">02</div><h3>打开次级文件夹</h3><p>进入“学习通课程播放辅助”，双击 ChaoxingLearningAssistant.exe。</p></article>
+    <article class="card"><div class="num">03</div><h3>正常登录</h3><p>在程序网页区域登录。验证码、人脸或学校认证需要本人完成。</p></article>
+    <article class="card"><div class="num">04</div><h3>进入课程</h3><p>选中课程章节，等右侧显示真实章节与“第 N/M 个视频”。</p></article>
+    <article class="card"><div class="num">05</div><h3>开始辅助</h3><p>点击“开始辅助”。按钮会下沉，右上提示卡会确认功能是否开启。</p></article>
+    <article class="card"><div class="num">06</div><h3>保持开启</h3><p>自然播放结束后自动寻找下一视频；需要人工处理时程序会暂停并提示。</p></article>
+  </section>
+  <h2>自动播放顺序</h2><div class="flow"><span>当前视频自然结束</span><b>→</b><span>同章下一视频</span><b>→</b><span>跳过测验/作业</span><b>→</b><span>后续未完成章节</span></div>
+  <div class="notice"><strong>怎样确认操作生效？</strong><br>按钮按下的缩小与下沉表示点击已经发生；右上角提示卡表示程序状态已经改变。真正显示“播放中”前，程序还会核对网页播放器是否真的开始播放。</div>
+  <div class="notice warn"><strong>遇到登录、验证码或不自动播放</strong><br>先按页面要求完成人工验证。浏览器明确拒绝自动播放时，只需在正确视频上手动点一次播放，程序不会为了继续而循环乱点。</div>
+  <h2>反馈问题前</h2><section class="card"><p>打开程序日志窗口并导出诊断包。公开上传前，必须删掉账号、学校、课程地址中的身份参数、Cookie 和其他隐私信息。建议同时说明版本、问题发生步骤、当时处于第几个视频。</p></section>
+  <h2>工具边界与免责声明</h2><section class="card"><p><strong>本作品只是辅助工具。</strong>它只读取真实课程、章节、任务点和播放器状态，并辅助真实点击、播放、暂停、切换与倍速恢复。</p><p>本作品不会绕过验证码、人脸识别、学校统一认证、登录限制或平台风控；不会伪造观看时长、完成状态、学习进度、成绩或平台返回结果；不会自动答题、自动考试、自动签到、代做作业或伪造成绩。</p><p>使用前请确认所在学校、课程和平台规则允许使用辅助工具。使用者应对具体使用方式及其后果负责。本作品与超星学习通官方不存在隶属、授权或合作关系，相关名称与商标归其权利人所有。</p><p>平台页面可能随时变化，程序无法保证适配所有学校和课程，也无法保证平台最终记录结果。重要课程请人工核对实际进度。</p></section>
+  <p class="footer">学习通课程播放辅助 v1.32 · 教学可离线打开，不连接外部图片或统计服务</p>
+</main></body></html>

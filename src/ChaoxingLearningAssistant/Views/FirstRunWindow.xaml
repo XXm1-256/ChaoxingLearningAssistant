@@ -1,0 +1,77 @@
+﻿<Window x:Class="ChaoxingLearningAssistant.Views.FirstRunWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="使用教学 · 学习通课程播放辅助" Width="820" Height="590"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    <Grid Background="{DynamicResource WindowBackgroundBrush}" Margin="22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Margin="4,0,4,20">
+            <TextBlock Text="使用教学" Style="{StaticResource EyebrowTextStyle}"/>
+            <TextBlock Text="放着不管，也能看懂程序正在做什么" FontSize="27" FontWeight="SemiBold" Margin="0,5,0,0"/>
+            <TextBlock Text="登录、选择课程、开始辅助；之后程序按视频顺序续播，并避开章节测验。"
+                       FontSize="13" Margin="0,7,0,0" Foreground="{DynamicResource SecondaryTextBrush}"/>
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Border Style="{StaticResource CardBorderStyle}" Padding="18" Effect="{StaticResource PanelShadow}">
+                <StackPanel>
+                    <Border Width="42" Height="42" HorizontalAlignment="Left" CornerRadius="12" Background="{DynamicResource AccentSoftBrush}">
+                        <TextBlock Text="01" Foreground="{DynamicResource AccentBrush}" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="登录学习通" FontSize="16" FontWeight="SemiBold" Margin="0,16,0,0"/>
+                    <TextBlock Text="在内嵌网页中正常完成账号、扫码或学校统一身份认证。程序不保存明文密码。"
+                               TextWrapping="Wrap" LineHeight="20" Margin="0,8,0,0" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="2" Style="{StaticResource CardBorderStyle}" Padding="18" Effect="{StaticResource PanelShadow}">
+                <StackPanel>
+                    <Border Width="42" Height="42" HorizontalAlignment="Left" CornerRadius="12" Background="{DynamicResource AccentSoftBrush}">
+                        <TextBlock Text="02" Foreground="{DynamicResource AccentBrush}" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="选择课程" FontSize="16" FontWeight="SemiBold" Margin="0,16,0,0"/>
+                    <TextBlock Text="读取当前页面可识别课程，也可以把课程链接粘贴到地址栏作为备用入口。"
+                               TextWrapping="Wrap" LineHeight="20" Margin="0,8,0,0" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="4" Style="{StaticResource CardBorderStyle}" Padding="18" Effect="{StaticResource PanelShadow}">
+                <StackPanel>
+                    <Border Width="42" Height="42" HorizontalAlignment="Left" CornerRadius="12" Background="{DynamicResource AccentSoftBrush}">
+                        <TextBlock Text="03" Foreground="{DynamicResource AccentBrush}" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="开始辅助" FontSize="16" FontWeight="SemiBold" Margin="0,16,0,0"/>
+                    <TextBlock Text="程序确认真实播放器开始后才显示播放中；按钮和右上提示卡会说明每次操作是否生效。"
+                               TextWrapping="Wrap" LineHeight="20" Margin="0,8,0,0" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="6" Style="{StaticResource CardBorderStyle}" Padding="18" Effect="{StaticResource PanelShadow}">
+                <StackPanel>
+                    <Border Width="42" Height="42" HorizontalAlignment="Left" CornerRadius="12" Background="{DynamicResource AccentSoftBrush}">
+                        <TextBlock Text="04" Foreground="{DynamicResource AccentBrush}" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="连续播放" FontSize="16" FontWeight="SemiBold" Margin="0,16,0,0"/>
+                    <TextBlock Text="同章按视频顺序播放，测验和作业不进入视频编号；本章结束后再寻找后续未完成章节。验证码或认证页面会暂停。"
+                               TextWrapping="Wrap" LineHeight="20" Margin="0,8,0,0" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Button Grid.Row="2" Style="{StaticResource GradientButtonStyle}" Content="明白了  →"
+                Width="150" Height="46" Margin="0,20,0,0"
+                HorizontalAlignment="Right" IsDefault="True" Click="Close_Click"/>
+    </Grid>
+</Window>

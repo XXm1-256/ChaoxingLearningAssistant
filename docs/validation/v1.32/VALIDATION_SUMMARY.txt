@@ -1,0 +1,15 @@
+ChaoxingLearningAssistant v1.32 validation summary
+Date: 2026-09-11
+
+Release build: PASS (0 warnings, 0 errors)
+MSTest: PASS (32/32)
+Node adapter regression: PASS (47/47, including same-chapter cross-iframe targeting)
+Static regression check: PASS
+Public-source privacy scan: PASS
+Windows download package top-level structure: PASS (2 tutorial files + 1 program folder)
+Runtime-data exclusion: PASS
+User ZIP development-archive exclusion: PASS
+Developer ZIP cumulative archive and source presence: PASS
+Extracted-package startup smoke: PASS (5 seconds)
+Installer: SKIPPED (Inno Setup 6 not installed)
+Real Chaoxing account end-to-end unattended playback: NOT RUN

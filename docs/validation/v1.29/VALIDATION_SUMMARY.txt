@@ -1,0 +1,22 @@
+Chaoxing Learning Assistant v1.29 validation
+Date: 2026-09-11
+.NET SDK: 8.0.424
+VSTest: 17.11.1 x64
+
+PASS: Release build, 0 warnings, 0 errors
+PASS: MSTest 29/29
+PASS: Node embedded-adapter regression 46/46
+PASS: Python static check
+PASS: quick-run publish
+PASS: self-contained win-x64 publish
+PASS: portable ZIP
+SKIPPED: Inno Setup installer
+NOT RUN: authenticated full-course unattended playback
+
+v1.29 coverage:
+- WebView2 autoplay policy enabled
+- completed chapter skipped from pending candidates
+- unknown video remains pending
+- chapter quiz placeholder excluded
+- current video ordinal format added
+- MASTER rebuilt from readable source documents

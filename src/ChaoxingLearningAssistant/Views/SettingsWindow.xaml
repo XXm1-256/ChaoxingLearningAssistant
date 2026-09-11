@@ -1,0 +1,105 @@
+﻿<Window x:Class="ChaoxingLearningAssistant.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="设置 · 学习通课程播放辅助" Width="620" Height="700"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        Foreground="{DynamicResource PrimaryTextBrush}">
+    <Grid Margin="20" TextElement.Foreground="{DynamicResource PrimaryTextBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Margin="3,0,3,16">
+            <TextBlock Text="偏好设置" Style="{StaticResource EyebrowTextStyle}"/>
+            <TextBlock Text="设置" FontSize="26" FontWeight="SemiBold" Margin="0,4,0,0" Foreground="{DynamicResource PrimaryTextBrush}"/>
+            <TextBlock Text="视觉、通知、稳定性与本地登录状态。" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,5,0,0"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Border Style="{StaticResource CardBorderStyle}" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="外观" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock Text="默认采用护眼浅绿主题；仍可切换深色或跟随系统。" FontSize="11.5" Margin="0,4,0,10" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        <ComboBox x:Name="ThemeCombo">
+                            <ComboBoxItem Content="跟随系统" Tag="System"/>
+                            <ComboBoxItem Content="护眼浅绿（推荐）" Tag="Light"/>
+                            <ComboBoxItem Content="深色森林" Tag="Dark"/>
+                        </ComboBox>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource CardBorderStyle}" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="通知" Style="{StaticResource SectionTitleStyle}"/>
+                        <CheckBox x:Name="InAppCheck" Content="界面提示卡和底部状态提示" Margin="3,11,3,0" Checked="Option_Changed" Unchecked="Option_Changed"/>
+                        <CheckBox x:Name="WindowsNotifyCheck" Content="Windows 系统通知" Margin="3,9,3,0" Checked="Option_Changed" Unchecked="Option_Changed"/>
+                        <CheckBox x:Name="SoundCheck" Content="提示音" Margin="3,9,3,0" Checked="Option_Changed" Unchecked="Option_Changed"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource CardBorderStyle}" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="连续播放" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock Text="默认开启：视频自然结束后切换下一节，并尽量延续播放与倍速。若浏览器阻止自动播放，会保留下一节并显示继续按钮。"
+                                   TextWrapping="Wrap" FontSize="11.5" Margin="0,4,0,9" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                        <CheckBox x:Name="AutoPlayNextCheck" Content="视频播完后自动切换并继续播放下一视频" Margin="3,5,3,0" Checked="Option_Changed" Unchecked="Option_Changed"/>
+                        <CheckBox x:Name="PreserveRateCheck" Content="切换视频时继承当前倍速" Margin="3,9,3,0" Checked="Option_Changed" Unchecked="Option_Changed"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource CardBorderStyle}" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="稳定性" Style="{StaticResource SectionTitleStyle}"/>
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="日志保留天数" VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                            <TextBox x:Name="LogDaysBox" Grid.Column="1"/>
+                        </Grid>
+                        <Grid Margin="0,7,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="页面基础超时（秒）" VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                            <TextBox x:Name="PageTimeoutBox" Grid.Column="1"/>
+                        </Grid>
+                        <Grid Margin="0,7,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="页面最大超时（秒）" VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}"/>
+                            <TextBox x:Name="MaxPageTimeoutBox" Grid.Column="1"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource CardBorderStyle}" Padding="16" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="诊断" Style="{StaticResource SectionTitleStyle}"/>
+                        <CheckBox x:Name="DeveloperCheck" Content="开启开发者模式" Margin="3,11,3,0" Checked="Option_Changed" Unchecked="Option_Changed"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource CardBorderStyle}" Padding="16">
+                    <StackPanel>
+                        <TextBlock Text="登录状态" Style="{StaticResource SectionTitleStyle}"/>
+                        <TextBlock Text="清除后需要重新在网页中登录；账号密码不会由程序保存。"
+                                   TextWrapping="Wrap" FontSize="11.5" Foreground="{DynamicResource SecondaryTextBrush}" Margin="0,5,0,10"/>
+                        <Button Content="清除登录状态" HorizontalAlignment="Left" Click="ClearLogin_Click"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Grid Grid.Row="2" Margin="0,16,0,0">
+            <Border x:Name="SettingsFeedback" HorizontalAlignment="Left" VerticalAlignment="Center"
+                    Background="{DynamicResource AccentSoftBrush}" CornerRadius="11" Padding="11,7" Visibility="Collapsed">
+                <TextBlock x:Name="SettingsFeedbackText" FontSize="11.5" Foreground="{DynamicResource AccentBrush}"/>
+            </Border>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Style="{StaticResource GhostButtonStyle}" Content="取消" Width="90" IsCancel="True"/>
+                <Button Style="{StaticResource PrimaryButtonStyle}" Content="保存" Width="90" IsDefault="True" Click="Save_Click"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
