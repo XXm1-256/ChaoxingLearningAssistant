@@ -11,7 +11,7 @@ from docx.shared import Inches, Pt, RGBColor
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "使用教学.docx"
-SCREENSHOT = ROOT / "docs" / "validation" / "v1.37" / "app-main.png"
+SCREENSHOT = ROOT / "docs" / "validation" / "v1.38" / "app-main.png"
 if not SCREENSHOT.exists():
     SCREENSHOT = ROOT / "docs" / "validation" / "v1.34" / "app-main.png"
 ACCENT = "3D9B67"
@@ -143,7 +143,7 @@ remove_paragraph_border(title)
 set_font(title.add_run("学习通课程视频播放助手使用教学"), size=28, bold=True)
 subtitle = doc.add_paragraph()
 subtitle.paragraph_format.space_after = Pt(16)
-set_font(subtitle.add_run("适用于 v1.37 Windows 便携版"), size=11.5, color="4E6C5C")
+set_font(subtitle.add_run("适用于 v1.38 Windows 便携版"), size=11.5, color="4E6C5C")
 
 add_body(doc, "这份教学面向第一次使用的同学。程序帮助减少重复点击：识别课程中的真实视频，按同一章节内的视频顺序继续播放，再查找后续未完成视频。课程是否完成仍以学习通页面的实际记录为准。")
 
@@ -151,7 +151,7 @@ doc.add_heading("五步开始使用", level=1)
 add_steps(doc, [
     "完整解压下载包，不要直接在压缩包里运行程序。",
     "进入“学习通课程视频播放助手”文件夹，双击 ChaoxingLearningAssistant.exe。",
-    "在程序中的学习通页面完成登录，并打开需要学习的课程。",
+    "完成登录后，单击左侧课程。程序会自动切到章节页签并读取目录，不必先在网页中手动打开章节。",
     "点顶部的“开始”。功能开启后会出现提示，右侧会显示当前视频和下一视频。",
     "保持程序开启。视频自然结束后，程序会继续寻找下一段真实视频。",
 ])
@@ -172,6 +172,7 @@ doc.add_page_break()
 doc.add_heading("主要按钮", level=1)
 buttons = [
     ("开始", "识别当前课程和待播放视频，并尝试开始播放。"),
+    ("课程列表", "单击课程即可进入并切换到章节页签；目录出现较慢时程序会继续补读。"),
     ("打开未完成章节", "打开候选章节后再核对真实视频；若视频均已看完、只剩测验或作业，会继续寻找后面的未看完视频。"),
     ("暂停辅助", "保留当前页面，但暂时不再自动查找或切换下一视频。"),
     ("全屏观看", "按 F11 让学习通网页铺满窗口；点顶部“退出全屏”，或按 Esc、F11 返回。"),
@@ -226,7 +227,7 @@ add_body(doc, "本程序只是网页播放辅助工具，不绕过学习通的�
 add_body(doc, "本作品与超星学习通官方不存在隶属、授权或合作关系。使用时请遵守学校、课程和平台规则。网页结构、网络状态和平台规则可能变化，程序不能保证学习通最终记录结果；重要课程请在学习通页面人工核对进度。")
 
 doc.core_properties.title = "学习通课程视频播放助手使用教学"
-doc.core_properties.subject = "学习通课程视频播放助手 v1.37 使用说明"
+doc.core_properties.subject = "学习通课程视频播放助手 v1.38 使用说明"
 doc.core_properties.author = "ChaoxingLearningAssistant"
 doc.save(OUTPUT)
 print(OUTPUT)

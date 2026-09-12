@@ -51,6 +51,9 @@ public sealed class ModelTests
         Assert.IsTrue(ChaoxingUrlClassifier.IsStudyUri("https://mooc1.chaoxing.com/mycourse/studentstudy?chapterId=1"));
         Assert.IsTrue(ChaoxingUrlClassifier.IsStudyUri("https://mooc1-1.chaoxing.com/mooc-ans/nodedetailcontroller/visitnodedetail?knowledgeId=1"));
         Assert.IsFalse(ChaoxingUrlClassifier.IsStudyUri("https://passport2.chaoxing.com/login"));
+        Assert.IsTrue(ChaoxingUrlClassifier.MayContainChapterCatalogUri("https://mooc1.chaoxing.com/mycourse/studentcourse?courseId=1&clazzid=2"));
+        Assert.IsTrue(ChaoxingUrlClassifier.MayContainChapterCatalogUri("https://mooc1.chaoxing.com/visit/courses/study?courseId=1"));
+        Assert.IsFalse(ChaoxingUrlClassifier.MayContainChapterCatalogUri("https://i.chaoxing.com/base"));
     }
     [TestMethod]
     public void ChapterVideoTasks_AreTrackedSeparatelyFromChapterType()

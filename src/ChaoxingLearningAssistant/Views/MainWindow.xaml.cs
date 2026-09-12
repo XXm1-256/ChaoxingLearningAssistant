@@ -694,7 +694,7 @@ public partial class MainWindow : Window
         var chapters = await _adapter.ScanChaptersAsync();
         if (!IsCurrentPage(pageVersion)) return;
 
-        if (chapters.Count == 0 && ChaoxingUrlClassifier.IsStudyUri(currentUrl))
+        if (chapters.Count == 0 && ChaoxingUrlClassifier.MayContainChapterCatalogUri(currentUrl))
         {
             for (var attempt = 1; attempt <= 4 && chapters.Count == 0; attempt++)
             {
@@ -782,7 +782,7 @@ public partial class MainWindow : Window
         try
         {
             if (_vm.Chapters.Count == 0 &&
-                ChaoxingUrlClassifier.IsStudyUri(Browser.Source?.ToString()) &&
+                ChaoxingUrlClassifier.MayContainChapterCatalogUri(Browser.Source?.ToString()) &&
                 DateTime.Now - _lastChapterRefreshAttempt >= TimeSpan.FromSeconds(8))
             {
                 _lastChapterRefreshAttempt = DateTime.Now;
@@ -2570,14 +2570,35 @@ public partial class MainWindow : Window
             CurrentCourseText.Text = _vm.SelectedCourse.Title;
     }
 
-    private void CourseList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    private async void CourseList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (_vm.SelectedCourse is null)
+        if (_adapter is null || _isClosing || _isNavigating)
             return;
 
-        CurrentCourseText.Text = _vm.SelectedCourse.Title;
+        var source = e.OriginalSource as DependencyObject;
+        var item = source is null ? null : System.Windows.Controls.ItemsControl.ContainerFromElement(CourseList, source) as System.Windows.Controls.ListBoxItem;
+        if (item?.DataContext is not CourseItem course)
+            return;
+
+        e.Handled = true;
+        _vm.SelectedCourse = course;
+        CurrentCourseText.Text = course.Title;
         WelcomePanel.Visibility = Visibility.Collapsed;
-        Navigate(_vm.SelectedCourse.Url);
+        LibraryTabs.SelectedIndex = 1;
+
+        if (UriEquivalent(Browser.Source?.ToString(), course.Url))
+        {
+            ShowInAppNotice("正在读取章节", $"正在刷新“{course.Title}”的章节目录。", false);
+            await RefreshChaptersInternalAsync(silent: false, preserveSelection: false);
+            return;
+        }
+
+        _vm.Chapters.Clear();
+        _vm.VideoTasks.Clear();
+        _vm.SelectedChapter = null;
+        _vm.CurrentChapterText = "正在读取章节…";
+        ShowInAppNotice("正在进入课程", $"正在打开“{course.Title}”并读取章节目录。", false);
+        Navigate(course.Url);
     }
 
     private async void ChapterList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -2608,6 +2629,12 @@ public partial class MainWindow : Window
                           FindFirstPendingNavigationCandidate(_vm.Chapters);
             if (chapter is null)
             {
+                if (_vm.Chapters.Count == 0 &&
+                    ChaoxingUrlClassifier.MayContainChapterCatalogUri(Browser.Source?.ToString()))
+                {
+                    NotifyUser("章节目录仍在加载", "课程页面已经打开，程序会继续读取稍后出现的章节目录；读取完成后再点一次即可。", false);
+                    return;
+                }
                 NotifyUser("没有可打开的视频", "当前目录没有识别到未完成或待核验的视频任务；可先在网页目录打开目标章节，再点击开始。", false);
                 return;
             }

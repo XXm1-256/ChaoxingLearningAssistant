@@ -58,6 +58,24 @@ public static class ChaoxingUrlClassifier
                query.Contains("knowledgeid=", StringComparison.Ordinal);
     }
 
+    public static bool MayContainChapterCatalogUri(string? url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            !ChaoxingConstants.IsChaoxingUri(uri) || IsLoginUri(uri))
+            return false;
+
+        if (IsStudyUri(url))
+            return true;
+
+        var path = uri.AbsolutePath.ToLowerInvariant();
+        var query = uri.Query.ToLowerInvariant();
+        return path.Contains("studentcourse", StringComparison.Ordinal) ||
+               path.Contains("/visit/courses", StringComparison.Ordinal) ||
+               (query.Contains("courseid=", StringComparison.Ordinal) &&
+                (path.Contains("/mycourse/", StringComparison.Ordinal) ||
+                 path.Contains("/course/", StringComparison.Ordinal)));
+    }
+
     public static bool IsGenericHomeUri(string? url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || !ChaoxingConstants.IsChaoxingUri(uri) || IsLoginUri(uri))
