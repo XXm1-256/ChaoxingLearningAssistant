@@ -5,6 +5,32 @@ namespace ChaoxingLearningAssistant.Services;
 /// <summary>只使用稳定媒体证据判断“还是不是同一条真实视频”，避免标题/时长延迟加载造成假切换。</summary>
 public static class PlayerMediaEvidence
 {
+    public static readonly TimeSpan PlaybackWaitTimeout = TimeSpan.FromSeconds(90);
+
+    public static PlayerSnapshot? PlaybackTarget(VideoTaskItem task, IEnumerable<VideoTaskItem> scannedTasks)
+    {
+        if (task.DomIndex < 0)
+        {
+            // Lazy task URLs describe the containing page and iframe, not the video element.
+            var loaded = scannedTasks.Where(x => x.DomIndex >= 0 &&
+                string.Equals(x.ChapterId, task.ChapterId, StringComparison.OrdinalIgnoreCase) &&
+                ((!string.IsNullOrWhiteSpace(task.MediaId) &&
+                  string.Equals(x.MediaId, task.MediaId, StringComparison.OrdinalIgnoreCase)) ||
+                 (!string.IsNullOrWhiteSpace(task.Source) &&
+                  string.Equals(x.DocumentUrl, task.Source, StringComparison.OrdinalIgnoreCase) &&
+                  (string.IsNullOrWhiteSpace(task.MediaId) || string.IsNullOrWhiteSpace(x.MediaId) ||
+                   string.Equals(x.MediaId, task.MediaId, StringComparison.OrdinalIgnoreCase)))))
+                .ToArray();
+            if (loaded.Length != 1) return null;
+            task = loaded[0];
+        }
+        return new PlayerSnapshot
+        {
+            Found = true, DocumentUrl = task.DocumentUrl, DomIndex = task.DomIndex,
+            MediaId = task.MediaId, Source = task.Source, TaskKey = task.TaskKey, ChapterId = task.ChapterId
+        };
+    }
+
     public static bool HasPlaybackProgress(PlayerSnapshot before, PlayerSnapshot after)
         => MatchesPlaybackTarget(before, after) && after.Found && !after.Paused && !after.Ended &&
            double.IsFinite(before.CurrentTime) && double.IsFinite(after.CurrentTime) &&

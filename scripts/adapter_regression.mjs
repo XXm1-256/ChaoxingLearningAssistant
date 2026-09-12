@@ -7,6 +7,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const source = readFileSync(fileURLToPath(new URL('../src/ChaoxingLearningAssistant/Chaoxing/ChaoxingAdapter.cs', import.meta.url)), 'utf8');
+test('all six playback waits use elapsed time and do not repeatedly activate a loading target', () => {
+  const windowSource = readFileSync(fileURLToPath(new URL('../src/ChaoxingLearningAssistant/Views/MainWindow.xaml.cs', import.meta.url)), 'utf8');
+  const methods = ['WaitForRealAutoAdvanceAsync', 'StartPlaybackWithRetryAsync',
+    'PreparePendingVideoAfterNavigationAsync', 'ScanTargetVideoTasksUntilStableAsync',
+    'WaitForPendingPlayerSwitchAsync', 'WaitForManualPlayerSwitchAsync'];
+  for (const name of methods) {
+    const start = windowSource.search(new RegExp(`private async Task[^\\n]* ${name}\\(`));
+    assert.ok(start >= 0, name);
+    const end = windowSource.indexOf('\n    private ', start + 1);
+    const body = windowSource.slice(start, end < 0 ? undefined : end);
+    assert.match(body, /Stopwatch.StartNew\(\)/, name);
+    assert.match(body, /wait.Elapsed < PlayerMediaEvidence.PlaybackWaitTimeout/, name);
+    assert.doesNotMatch(body, /attempt < (18|24|120)\b|retryTargetAction/, name);
+  }
+  const playback = windowSource.slice(windowSource.indexOf('private async Task<(bool Playing'), windowSource.indexOf('private async Task<(bool Playing') + 3100);
+  assert.match(playback, /if \(!playSubmitted\)/);
+  assert.doesNotMatch(playback, /current.ReadyState >= 2/);
+  assert.match(playback, /playSubmitted = true/);
+});
 function script(method) {
   const start = source.indexOf(` ${method}(`);
   assert.ok(start >= 0, `Missing method ${method}`);
@@ -14,6 +33,19 @@ function script(method) {
   assert.ok(match, `Missing script ${method}`);
   return match[1];
 }
+
+test('one-click mute uses WebView audio output and never pauses playback or changes system volume', () => {
+  const windowSource = readFileSync(fileURLToPath(new URL('../src/ChaoxingLearningAssistant/Views/MainWindow.xaml.cs', import.meta.url)), 'utf8');
+  const ui = readFileSync(fileURLToPath(new URL('../src/ChaoxingLearningAssistant/Views/MainWindow.xaml', import.meta.url)), 'utf8');
+  const start = windowSource.indexOf('private void Mute_Click(');
+  const body = windowSource.slice(start, windowSource.indexOf('private async void Start_Click', start));
+  assert.match(body, /core.IsMuted = !core.IsMuted/);
+  assert.match(body, /UpdateMuteButton\(\)/);
+  assert.doesNotMatch(body, /PauseVideo|\.volume\s*=|Navigate\(|SetMasterVolume/);
+  assert.match(windowSource, /IsMutedChanged \+=/);
+  assert.equal((ui.match(/Click="Mute_Click"/g) || []).length, 1);
+  assert.match(ui, /AutomationProperties.Name="一键静音"/);
+});
 
 function interpolatedScript(method, replacements = {}) {
   const start = source.indexOf(` ${method}(`);

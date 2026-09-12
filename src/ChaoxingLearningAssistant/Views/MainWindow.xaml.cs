@@ -225,6 +225,8 @@ public partial class MainWindow : Window
             options: environmentOptions);
 
         await Browser.EnsureCoreWebView2Async(environment);
+        Browser.CoreWebView2.IsMutedChanged += (_, _) => UpdateMuteButton();
+        UpdateMuteButton();
 
         // The learning site was designed for a full browser window. A modest default
         // zoom keeps its navigation and task content visible inside the three-pane shell.
@@ -1225,7 +1227,6 @@ public partial class MainWindow : Window
         PlayerSnapshot endedSnapshot,
         string logCode,
         string sourceLabel,
-        Func<Task<bool>>? retryTargetAction = null,
         long? operationGeneration = null,
         PlayerSnapshot? expectedTarget = null)
     {
@@ -1235,8 +1236,8 @@ public partial class MainWindow : Window
         _vm.PlaybackStatusText = "下一视频加载中，通常需要约半分钟";
         UpdateCompositeStatus();
 
-        var targetObserved = false;
-        for (var attempt = 0; attempt < 120; attempt++)
+        var wait = Stopwatch.StartNew();
+        for (var attempt = 0; wait.Elapsed < PlayerMediaEvidence.PlaybackWaitTimeout; attempt++)
         {
             if (_isClosing || _automationPaused || !IsCurrentPage(pageVersion) ||
                 !IsAutomationOperationCurrent(expectedGeneration))
@@ -1248,18 +1249,6 @@ public partial class MainWindow : Window
             var candidate = await _adapter.GetPlayerSnapshotAsync(expectedTarget);
             if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration))
                 return false;
-
-            if (candidate.Found && !candidate.Ended && !IsSameMediaEvidence(endedSnapshot, candidate))
-                targetObserved = true;
-
-            if (!targetObserved && retryTargetAction is not null && attempt is 5 or 14 or 23 &&
-                (!candidate.Found || candidate.Ended || IsSameMediaEvidence(endedSnapshot, candidate)))
-            {
-                await retryTargetAction();
-                if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration))
-                    return false;
-                App.Logger.Debug(logCode, $"{sourceLabel}尚未形成可播放的新播放器，重新激活目标任务点；attempt={attempt + 1}");
-            }
 
             if (!candidate.Found || candidate.Ended || IsSameMediaEvidence(endedSnapshot, candidate))
                 continue;
@@ -1359,12 +1348,6 @@ public partial class MainWindow : Window
             nextTask is null
                 ? "已按页面相对顺序提交当前章节内下一视频切换，等待真实播放器核验。"
                 : $"已按扫描证据提交同章下一视频：{nextTask.DisplayTitle}；等待真实播放器核验。");
-        Func<Task<bool>> retryTargetAction = () => _adapter.AdvanceToNextVideoTaskAsync(
-                endedSnapshot.MediaId,
-                endedSnapshot.Source,
-                nextTask?.MediaId,
-                nextTask?.DocumentUrl,
-                nextTask?.Source);
         var expectedTarget = nextTask is not null && nextTask.DomIndex >= 0
             ? new PlayerSnapshot
             {
@@ -1381,7 +1364,6 @@ public partial class MainWindow : Window
             endedSnapshot,
             "CX-AUTO-NEXT-IN-CHAPTER",
             "同章节下一视频任务点",
-            retryTargetAction,
             operationGeneration,
             expectedTarget);
         return advanced ? AdvanceAttemptResult.Advanced : AdvanceAttemptResult.Failed;
@@ -1398,7 +1380,9 @@ public partial class MainWindow : Window
         var expectedGeneration = _automationGeneration;
         var target = initial;
         var current = initial;
-        for (var attempt = 0; attempt < 24; attempt++)
+        var playSubmitted = false;
+        var wait = Stopwatch.StartNew();
+        for (var attempt = 0; wait.Elapsed < PlayerMediaEvidence.PlaybackWaitTimeout; attempt++)
         {
             if (_isClosing || _automationPaused || !IsCurrentPage(pageVersion) ||
                 !IsAutomationOperationCurrent(expectedGeneration))
@@ -1413,7 +1397,11 @@ public partial class MainWindow : Window
             }
 
             var before = current;
-            await _adapter.PlayVideoAsync(target);
+            if (!playSubmitted)
+            {
+                await _adapter.PlayVideoAsync(target);
+                playSubmitted = true;
+            }
             if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration)) return (false, current);
             await Task.Delay(500, _lifetimeCts.Token);
             if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration)) return (false, current);
@@ -1428,11 +1416,10 @@ public partial class MainWindow : Window
                 return (true, current);
             }
 
-            if (attempt < 23)
-                await Task.Delay(300, _lifetimeCts.Token);
+            await Task.Delay(300, _lifetimeCts.Token);
         }
 
-        App.Logger.Warn("CX-AUTO-PLAY", $"{sourceLabel}已切换播放器，但等待约 40 秒仍未确认播放进度，保留当前目标。 ");
+        App.Logger.Warn("CX-AUTO-PLAY", $"{sourceLabel}已切换播放器，但等待 90 秒仍未确认播放进度，保留当前目标。 ");
         return (false, current);
     }
 
@@ -1576,16 +1563,20 @@ public partial class MainWindow : Window
                 await _adapter.FocusFirstUnfinishedVideoTaskAsync())
             {
                 var task = targetTasks.First(x => !x.CompletionKnown || !x.IsCompleted);
-                var expected = new PlayerSnapshot
-                {
-                    Found = true, DocumentUrl = task.DocumentUrl, DomIndex = task.DomIndex,
-                    MediaId = task.MediaId, Source = task.Source, TaskKey = task.TaskKey,
-                    ChapterId = task.ChapterId
-                };
+                var expected = PlayerMediaEvidence.PlaybackTarget(task, targetTasks);
                 PlayerSnapshot? focused = null;
-                for (var attempt = 0; attempt < 120; attempt++)
+                var wait = Stopwatch.StartNew();
+                while (wait.Elapsed < PlayerMediaEvidence.PlaybackWaitTimeout)
                 {
                     if (_isClosing || _automationPaused || _pendingNextVideo != pending) return;
+                    if (expected is null)
+                        expected = PlayerMediaEvidence.PlaybackTarget(task, await _adapter.ScanVideoTasksAsync());
+                    if (_isClosing || _automationPaused || _pendingNextVideo != pending) return;
+                    if (expected is null)
+                    {
+                        await Task.Delay(350, _lifetimeCts.Token);
+                        continue;
+                    }
                     var candidate = await _adapter.GetPlayerSnapshotAsync(expected);
                     if (_isClosing || _automationPaused || _pendingNextVideo != pending) return;
                     if (candidate.Found && !candidate.Ended &&
@@ -1675,7 +1666,8 @@ public partial class MainWindow : Window
         string? previousFingerprint = null;
         var stableCount = 0;
         VideoTaskItem[] latest = Array.Empty<VideoTaskItem>();
-        for (var attempt = 0; attempt < 6; attempt++)
+        var wait = Stopwatch.StartNew();
+        while (wait.Elapsed < PlayerMediaEvidence.PlaybackWaitTimeout)
         {
             if (_isClosing || _automationPaused || _pendingNextVideo != target)
                 return (latest, false);
@@ -1694,10 +1686,10 @@ public partial class MainWindow : Window
                 stableCount = 1;
             }
 
-            if (stableCount >= 3)
+            if (latest.Length > 0 && stableCount >= 3)
                 return (latest, true);
 
-            await Task.Delay(450 + attempt * 100, _lifetimeCts.Token);
+            await Task.Delay(550, _lifetimeCts.Token);
         }
 
         return (latest, false);
@@ -1708,7 +1700,8 @@ public partial class MainWindow : Window
         if (_adapter is null) return null;
         var expectedGeneration = _automationGeneration;
 
-        for (var attempt = 0; attempt < 120; attempt++)
+        var wait = Stopwatch.StartNew();
+        for (var attempt = 0; wait.Elapsed < PlayerMediaEvidence.PlaybackWaitTimeout; attempt++)
         {
             if (_isClosing || _automationPaused || _pendingNextVideo != target ||
                 !IsAutomationOperationCurrent(expectedGeneration))
@@ -1724,9 +1717,6 @@ public partial class MainWindow : Window
                     await PlayerMatchesTargetChapterAsync(target, player, allowCatalogEvidence: refreshStructure))
                     return player;
             }
-
-            if ((attempt == 4 || attempt == 8) && await HasTargetChapterPageEvidenceAsync(target))
-                await _adapter.FocusFirstUnfinishedVideoTaskAsync();
 
             await Task.Delay(350, _lifetimeCts.Token);
         }
@@ -2604,6 +2594,34 @@ public partial class MainWindow : Window
         _trayService.SetState($"{playback} / {_vm.StatusText}");
     }
 
+    private void UpdateMuteButton()
+    {
+        var core = Browser.CoreWebView2;
+        MuteButton.IsEnabled = core is not null;
+        if (core is null) return;
+        MuteButton.Content = core.IsMuted ? "已静音" : "静音";
+        MuteButton.ToolTip = core.IsMuted ? "当前网页已静音，点击恢复声音" : "点击静音，仅影响本程序中的网页声音";
+        System.Windows.Automation.AutomationProperties.SetName(MuteButton, MuteButton.ToolTip.ToString());
+    }
+
+    private void Mute_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isClosing || Browser.CoreWebView2 is not { } core) return;
+        try
+        {
+            core.IsMuted = !core.IsMuted;
+            UpdateMuteButton();
+            ShowInAppNotice(core.IsMuted ? "网页已静音" : "已恢复网页声音",
+                core.IsMuted ? "视频会继续播放，切换下一视频后仍保持静音。再次点击“已静音”可恢复声音。" : "已取消本程序的网页静音，不改变播放器原来的音量。", false);
+            App.Logger.Info("CX-AUDIO-MUTE", core.IsMuted ? "网页静音已开启。" : "网页静音已关闭。");
+        }
+        catch (Exception ex)
+        {
+            App.Logger.Error("CX-AUDIO-MUTE", "切换网页静音失败。", ex);
+            ShowInAppNotice("声音切换失败", "请等待网页准备完成后再试。", true);
+        }
+    }
+
     private async void Start_Click(object sender, RoutedEventArgs e)
     {
         if (_adapter is null || _isClosing || _isNavigating || _playerCommandInProgress ||
@@ -3061,7 +3079,8 @@ public partial class MainWindow : Window
         if (_adapter is null) return null;
         var expectedGeneration = _automationGeneration;
 
-        for (var attempt = 0; attempt < 18; attempt++)
+        var wait = Stopwatch.StartNew();
+        for (var attempt = 0; wait.Elapsed < PlayerMediaEvidence.PlaybackWaitTimeout; attempt++)
         {
             if (_isClosing || !IsAutomationOperationCurrent(expectedGeneration)) return null;
             if (_isNavigating)
@@ -3085,9 +3104,6 @@ public partial class MainWindow : Window
                     return snapshot;
                 }
             }
-
-            if ((attempt == 4 || attempt == 9 || attempt == 13) && await HasTargetChapterPageEvidenceAsync(target))
-                await _adapter.FocusFirstUnfinishedVideoTaskAsync();
 
             await Task.Delay(300, _lifetimeCts.Token);
         }
