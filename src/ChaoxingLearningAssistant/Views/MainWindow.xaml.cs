@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 36842)
-Total output lines: 3305
-
 ﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.Media;
@@ -1323,7 +1320,589 @@ public partial class MainWindow : Window
                 if (!pending.IsSyntheticUrl && IsSafeChapterFallbackUrl(pending.Url) && !UriEquivalent(pending.Url, Browser.Source?.ToString()))
                 {
                     App.Logger.Info("CX-AUTO-NEXT-HREF", $"上下文导航不可用，改用目录真实 href：{pending.Title}");
-                    _pendingNavigationR…6842 tokens truncated…ar byKey = tasks.FirstOrDefault(x =>
+                    _pendingNavigationRequested = true;
+                    _focusUnfinishedAfterNavigation = true;
+                    Navigate(pending.Url);
+                    return;
+                }
+
+                await HandlePendingVideoUnavailableAsync(pending, "DOM click、完整 toOld 参数和真实学习页导航均未切出新播放器");
+                return;
+            }
+
+            // 目录的“章节未完成”也可能只代表测验或作业。进入候选章节后必须重新读取真实视频状态；
+            // 若视频全部完成，直接继续后续章节，不能把当前已完成播放器重新播放。
+            var targetTasks = (await _adapter.ScanVideoTasksAsync())
+                .Where(x => VideoTaskBelongsToChapter(x, pending) || x.IsPlaying || x.IsVisible)
+                .OrderBy(x => x.Index)
+                .ToArray();
+            if (CoursePlaybackPlan.AllKnownVideosCompleted(targetTasks))
+            {
+                await SkipChapterWithCompletedVideosAsync(pending);
+                return;
+            }
+
+            // 章节本身可能包含多个视频。章节切换确认后再把真实页面聚焦到该章节第一条待核验视频，
+            // 避免只进入章节却停留在该章节已完成的第一条视频。
+            if (targetTasks.Any(x => !x.CompletionKnown || !x.IsCompleted) &&
+                await _adapter.FocusFirstUnfinishedVideoTaskAsync())
+            {
+                await Task.Delay(250, _lifetimeCts.Token);
+                if (_isClosing || _automationPaused || _pendingNextVideo != pending) return;
+                var focused = await _adapter.GetPlayerSnapshotAsync();
+                if (focused.Found && !IsStaleEndedPlayer(focused) &&
+                    await PlayerMatchesTargetChapterAsync(pending, focused, allowCatalogEvidence: true))
+                {
+                    player = focused;
+                }
+            }
+
+            ConfirmCurrentChapter(pending, player, updateVideoTitle: true);
+
+            if (!App.Settings.Current.AutoPlayNextVideo)
+            {
+                await _adapter.PauseVideoAsync();
+                if (_pendingNextVideo != pending) return;
+                ShowContinueNextFallback(pending, "下一节已真实切换，等待确认播放", chapterAlreadyConfirmed: true);
+                return;
+            }
+
+            await ContinuePendingVideoAsync(pending, userInitiated: false, player);
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            _pendingPreparationInProgress = false;
+        }
+    }
+
+    private async Task SkipChapterWithCompletedVideosAsync(ChapterItem completedChapter)
+    {
+        if (_adapter is null || _pendingNextVideo != completedChapter || _isClosing)
+            return;
+
+        var identity = ChapterIdentity(completedChapter);
+        _courseVerifiedChapters.Add(identity);
+        _courseUnresolvedChapters.Remove(identity);
+        _autoAdvanceVisited.Add(identity);
+        App.Logger.Info("CX-COURSE-VIDEOS-COMPLETE",
+            $"章节总状态仍未完成，但真实视频均已完成，继续检查后续章节：{completedChapter.Title}");
+        ShowInAppNotice("本章视频已完成", $"“{completedChapter.DisplayTitle}”只剩测验或其他任务，正在继续查找未看完视频。", false);
+
+        var next = FindNextSequentialNavigationCandidate(completedChapter.Index);
+        if (next is null && !string.IsNullOrWhiteSpace(completedChapter.ChapterId))
+        {
+            next = await _adapter.FindNextChapterCandidateAsync(completedChapter.ChapterId);
+            if (next is not null)
+                next.Index = completedChapter.Index == int.MaxValue ? int.MaxValue : completedChapter.Index + 1;
+        }
+
+        if (next is not null && !_autoAdvanceVisited.Contains(ChapterIdentity(next)))
+        {
+            _pendingPreparationInProgress = false;
+            await QueueAndOpenNextChapterAsync(next);
+            return;
+        }
+
+        ClearPendingNextVideo(clearSelection: false);
+        _stateMachine.Transition(AppRunState.WaitingForUser, "后续未找到未完成视频");
+        NotifyUser("没有未看完视频", "已跳过视频全部完成的章节，后续暂未识别到仍需播放的视频。", false);
+    }
+
+    private async Task<PlayerSnapshot?> WaitForPendingPlayerSwitchAsync(ChapterItem target, PlayerSnapshot? originSnapshot)
+    {
+        if (_adapter is null) return null;
+
+        for (var attempt = 0; attempt < 14; attempt++)
+        {
+            if (_isClosing || _automationPaused || _pendingNextVideo != target)
+                return null;
+
+            var player = await _adapter.GetPlayerSnapshotAsync();
+            if (player.Found)
+            {
+                var changed = originSnapshot?.Found != true || !IsSameMediaEvidence(originSnapshot, player);
+                var refreshStructure = attempt is 0 or 4 or 8 or 12;
+                if (changed && !IsStaleEndedPlayer(player) &&
+                    await PlayerMatchesTargetChapterAsync(target, player, allowCatalogEvidence: refreshStructure))
+                    return player;
+            }
+
+            if ((attempt == 4 || attempt == 8) && await HasTargetChapterPageEvidenceAsync(target))
+                await _adapter.FocusFirstUnfinishedVideoTaskAsync();
+
+            await Task.Delay(350, _lifetimeCts.Token);
+        }
+
+        App.Logger.Warn("CX-CHAPTER-SWITCH-NOOP", $"目录目标未造成播放器切换：{target.Title}");
+        return null;
+    }
+
+    private async Task ContinuePendingVideoAsync(ChapterItem target, bool userInitiated, PlayerSnapshot? knownSnapshot = null)
+    {
+        if (_adapter is null || _pendingNextVideo != target || _isClosing)
+            return;
+
+        ContinueNextButton.Visibility = Visibility.Collapsed;
+        _vm.CanContinueNext = false;
+
+        var snapshot = knownSnapshot ?? await WaitForPendingPlayerSwitchAsync(target, _pendingOriginPlayerSnapshot);
+        if (_pendingNextVideo != target || _isClosing) return;
+        if (snapshot is null || !snapshot.Found || IsStaleEndedPlayer(snapshot))
+        {
+            await HandlePendingVideoUnavailableAsync(target, "未确认播放器已经切到目标章节");
+            return;
+        }
+
+        ConfirmCurrentChapter(target, snapshot, updateVideoTitle: true);
+        _courseUnresolvedChapters.Remove(ChapterIdentity(target));
+
+        var playback = await StartPlaybackWithRetryAsync(snapshot, userInitiated ? "手动继续下一节" : "自动切换下一节");
+        var played = playback.Playing;
+        snapshot = playback.Snapshot;
+        if (_pendingNextVideo != target || _isClosing) return;
+        if (!played)
+        {
+            ShowContinueNextFallback(target, "浏览器媒体策略阻止自动播放", chapterAlreadyConfirmed: true);
+            return;
+        }
+
+        var verified = await _adapter.GetPlayerSnapshotAsync();
+        if (verified.Found && !IsStaleEndedPlayer(verified))
+        {
+            _lastPlayerIdentity = PlayerIdentity(verified);
+            ConfirmCurrentChapter(target, verified, updateVideoTitle: true);
+        }
+
+        ClearPendingNextVideo(clearSelection: false);
+        _autoAdvanceVisited.Clear();
+        _lastEndedSource = string.Empty;
+        _lastEndedMediaIdentity = string.Empty;
+        _lastEndedPlayerSnapshot = null;
+        _stateMachine.Transition(AppRunState.Playing, userInitiated ? "用户继续已确认的下一节" : "已确认切换并继续播放下一视频");
+        App.Logger.Info("CX-AUTO-NEXT", $"播放器真实切换后开始播放：{target.Title}；继承倍速={_lastObservedPlaybackRate:0.##}x");
+    }
+
+    private async Task HandlePendingVideoUnavailableAsync(ChapterItem pending, string reason)
+    {
+        if (_pendingNextVideo != pending) return;
+
+        App.Logger.Warn("CX-AUTO-NEXT", $"候选章节未确认播放器切换：{pending.Title}；{reason}");
+        _autoAdvanceVisited.Add(ChapterIdentity(pending));
+
+        var confirmedNoVideo = await ConfirmChapterHasNoVideoAsync(pending);
+        if (confirmedNoVideo)
+        {
+            _courseVerifiedChapters.Add(ChapterIdentity(pending));
+            _courseUnresolvedChapters.Remove(ChapterIdentity(pending));
+            App.Logger.Info("CX-COURSE-NO-VIDEO", $"章节已确认没有真实视频，继续检查后续章节：{pending.Title}");
+        }
+        else
+        {
+            _courseUnresolvedChapters[ChapterIdentity(pending)] = reason;
+        }
+
+        var adapter = _adapter;
+        if (App.Settings.Current.AutoPlayNextVideo &&
+            !_automationPaused && adapter is not null)
+        {
+            var next = FindNextSequentialNavigationCandidate(pending.Index);
+            if (next is null && !string.IsNullOrWhiteSpace(pending.ChapterId))
+            {
+                next = await adapter.FindNextChapterCandidateAsync(pending.ChapterId);
+                if (next is not null)
+                {
+                    next.Index = pending.Index == int.MaxValue ? int.MaxValue : pending.Index + 1;
+                    App.Logger.Info("CX-AUTO-NEXT-FALLBACK", $"当前候选所有真实导航路径都未切出新播放器，继续按网页原生目录尝试后续章节：{next.Title}");
+                }
+            }
+
+            if (next is not null && !_autoAdvanceVisited.Contains(ChapterIdentity(next)))
+            {
+                _pendingPreparationInProgress = false;
+                await QueueAndOpenNextChapterAsync(next);
+                return;
+            }
+        }
+
+        ShowContinueNextFallback(pending, reason, chapterAlreadyConfirmed: false);
+    }
+
+    private async Task<bool> ConfirmChapterHasNoVideoAsync(ChapterItem target)
+    {
+        if (_adapter is null || _isClosing || !await HasTargetChapterPageEvidenceAsync(target))
+            return false;
+
+        var player = await _adapter.GetPlayerSnapshotAsync();
+        if (player.Found && !IsStaleEndedPlayer(player) &&
+            await PlayerMatchesTargetChapterAsync(target, player, allowCatalogEvidence: true))
+            return false;
+
+        var tasks = await _adapter.ScanVideoTasksAsync();
+        return !tasks.Any(x => VideoTaskBelongsToChapter(x, target) || x.IsPlaying || x.IsVisible);
+    }
+
+    private async Task VerifyCourseCompletionOrContinueAsync(PlayerSnapshot endedSnapshot, int currentIndex)
+    {
+        EnsureCourseTraversalStarted(currentIndex);
+        await RefreshChaptersInternalAsync(silent: true, playerEvidence: endedSnapshot, preserveSelection: true);
+        if (_isClosing || _automationPaused) return;
+
+        if (_vm.Chapters.Count == 0)
+        {
+            ClearPendingNextVideo();
+            _stateMachine.Transition(AppRunState.WaitingForUser, "全课程复核时未读取到章节目录");
+            NotifyUser("课程目录暂时无法复核", "程序没有读取到完整章节目录，因此不会提前显示课程完成。页面稳定后可点击“开始”继续。", false);
+            return;
+        }
+
+        foreach (var completed in _vm.Chapters.Where(x => !ChapterHasPendingVideo(x)))
+            _courseUnresolvedChapters.Remove(ChapterIdentity(completed));
+
+        var pending = CoursePlaybackPlan.BuildPendingChapters(
+            _vm.Chapters,
+            _courseTraversalStartIndex,
+            _courseVerifiedChapters);
+        App.Logger.Info("CX-COURSE-AUDIT",
+            $"全课程复核：起始序号={_courseTraversalStartIndex}；待核验章节={pending.Count}；无法确认={_courseUnresolvedChapters.Count}");
+
+        var actionable = pending.FirstOrDefault(x => !_courseUnresolvedChapters.ContainsKey(ChapterIdentity(x)));
+        if (actionable is not null)
+        {
+            _autoAdvanceVisited.Clear();
+            await QueueAndOpenNextChapterAsync(actionable);
+            return;
+        }
+
+        var unresolved = pending.FirstOrDefault(x => _courseUnresolvedChapters.ContainsKey(ChapterIdentity(x)));
+        if (unresolved is not null)
+        {
+            var reason = _courseUnresolvedChapters[ChapterIdentity(unresolved)];
+            ShowContinueNextFallback(unresolved, $"全课程复核仍无法确认该章节：{reason}", chapterAlreadyConfirmed: false);
+            return;
+        }
+
+        if (_courseUnresolvedChapters.Count > 0)
+        {
+            ClearPendingNextVideo();
+            _stateMachine.Transition(AppRunState.WaitingForUser, "全课程复核仍有目录外的未确认章节");
+            NotifyUser("仍有章节未能核验", "部分章节此前未能打开，并且当前目录没有重新提供可靠证据，因此不会提前显示课程完成。", false);
+            return;
+        }
+
+        ClearPendingNextVideo();
+        _stateMachine.Transition(AppRunState.CourseCompleted, "全课程待播清单已清空并完成复核");
+        NotifyUser("课程视频已全部处理", "从本次起点开始，目录中的待播视频已经全部核验完成。", false);
+    }
+
+    private void EnsureCourseTraversalStarted(int startIndex)
+    {
+        if (_courseTraversalStartIndex >= 0) return;
+        _courseTraversalStartIndex = Math.Max(0, startIndex);
+        App.Logger.Info("CX-COURSE-QUEUE", $"建立全课程待播清单；起始章节序号={_courseTraversalStartIndex}");
+    }
+
+    private void ResetCourseTraversal(ChapterItem? start)
+    {
+        _courseVerifiedChapters.Clear();
+        _courseUnresolvedChapters.Clear();
+        _courseTraversalStartIndex = start is null ? -1 : Math.Max(0, start.Index);
+        App.Logger.Info("CX-COURSE-QUEUE", start is null
+            ? "已清空全课程待播清单"
+            : $"已从章节重新建立全课程待播清单：{start.Title}");
+    }
+
+    private void ShowContinueNextFallback(ChapterItem target, string reason, bool chapterAlreadyConfirmed)
+    {
+        if (_pendingNextVideo != target)
+            _pendingNextVideo = target;
+        _vm.NextVideoText = target.Title;
+        _vm.CanContinueNext = true;
+        ContinueNextButton.Visibility = Visibility.Visible;
+        _stateMachine.Transition(AppRunState.WaitingForUser, reason);
+        if (chapterAlreadyConfirmed)
+            NotifyUser("下一节等待播放", $"“{target.Title}”的播放器已经真实切换，可点击“继续下一节”。", false);
+        else
+            NotifyUser("章节尚未切换", $"点击了“{target.Title}”，但播放器没有变化；左侧和右侧不会提前跳过去。可在网页目录手动点该章节后再继续。", false);
+    }
+
+    private ChapterItem? FindNextNavigationCandidate(int afterIndex)
+    {
+        return _vm.Chapters
+            .Where(x => x.Index > afterIndex && x.IsNavigationCandidate && ChapterHasExplicitUnfinishedVideo(x))
+            .Where(x => !_autoAdvanceVisited.Contains(ChapterIdentity(x)))
+            .OrderBy(x => x.Index)
+            .FirstOrDefault();
+    }
+
+    private ChapterItem? FindNextSequentialNavigationCandidate(int afterIndex)
+    {
+        return CoursePlaybackPlan.BuildPendingChapters(
+                _vm.Chapters,
+                afterIndex == int.MaxValue ? int.MaxValue : afterIndex + 1,
+                _courseVerifiedChapters)
+            .Where(x => !_autoAdvanceVisited.Contains(ChapterIdentity(x)))
+            .FirstOrDefault();
+    }
+
+    private static bool ChapterHasExplicitUnfinishedVideo(ChapterItem chapter)
+    {
+        if (chapter.VideoTasks.Count > 0)
+            return chapter.VideoTasks.Any(x => x.CompletionKnown && !x.IsCompleted);
+        return chapter.TaskType == TaskType.Video && chapter.CompletionKnown && !chapter.IsCompleted;
+    }
+
+    private static bool ChapterHasPendingVideo(ChapterItem chapter)
+        => CoursePlaybackPlan.HasPendingVideo(chapter);
+
+    private ChapterItem? FindFirstPendingNavigationCandidate(IEnumerable<ChapterItem> chapters)
+        => CoursePlaybackPlan.BuildPendingChapters(chapters, 0, _courseVerifiedChapters).FirstOrDefault();
+
+    private ChapterItem? FindFirstUnfinishedNavigationCandidate(IEnumerable<ChapterItem> chapters)
+    {
+        var items = chapters.OrderBy(x => x.Index).ToArray();
+
+        // 先按真实视频任务点找第一条明确未完成，再映射回所属章节；
+        // 只有平台没有暴露任务级信息时才退回章节级完成状态。
+        var unfinishedTask = _vm.VideoTasks
+            .Where(x => x.CompletionKnown && !x.IsCompleted)
+            .OrderBy(x => x.Index)
+            .FirstOrDefault();
+        if (unfinishedTask is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(unfinishedTask.ChapterId))
+            {
+                var byId = items.FirstOrDefault(x =>
+                    string.Equals(x.ChapterId, unfinishedTask.ChapterId, StringComparison.OrdinalIgnoreCase));
+                if (byId is not null) return byId;
+            }
+
+            if (!string.IsNullOrWhiteSpace(unfinishedTask.ChapterTitle))
+            {
+                var byTitle = items.FirstOrDefault(x => TitlesLikelyMatch(x.Title, unfinishedTask.ChapterTitle));
+                if (byTitle is not null) return byTitle;
+            }
+        }
+
+        return items
+            .Where(x => x.IsNavigationCandidate && ChapterHasExplicitUnfinishedVideo(x))
+            .FirstOrDefault();
+    }
+
+    private static bool IsCurrentChapterIdentity(ChapterItem chapter, string? currentChapterId)
+        => !string.IsNullOrWhiteSpace(currentChapterId) &&
+           !string.IsNullOrWhiteSpace(chapter.ChapterId) &&
+           string.Equals(chapter.ChapterId, currentChapterId, StringComparison.OrdinalIgnoreCase);
+
+    private bool IsStaleEndedPlayer(PlayerSnapshot snapshot)
+    {
+        if (!snapshot.Found) return false;
+        if (_lastEndedPlayerSnapshot?.Found == true &&
+            PlayerMediaEvidence.IsSameMedia(_lastEndedPlayerSnapshot, snapshot))
+            return true;
+        var identity = PlayerIdentity(snapshot);
+        if (!string.IsNullOrWhiteSpace(_lastEndedMediaIdentity) && !string.IsNullOrWhiteSpace(identity))
+            return string.Equals(identity, _lastEndedMediaIdentity, StringComparison.OrdinalIgnoreCase);
+        return !string.IsNullOrWhiteSpace(_lastEndedSource) &&
+               !string.IsNullOrWhiteSpace(snapshot.Source) &&
+               string.Equals(snapshot.Source, _lastEndedSource, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ChapterIdentity(ChapterItem chapter)
+        => CoursePlaybackPlan.Identity(chapter);
+
+    private static string PlayerIdentity(PlayerSnapshot snapshot)
+        => PlayerMediaEvidence.StableIdentity(snapshot);
+
+    private static string ShortIdentity(string? identity)
+    {
+        if (string.IsNullOrWhiteSpace(identity)) return "(none)";
+        return identity.Length <= 120 ? identity : identity[..120] + "...";
+    }
+
+    private string ResolveEffectiveCourseTitle(string? recognizedTitle)
+    {
+        var currentUrl = Browser.Source?.ToString() ?? string.Empty;
+        var currentCourseId = ExtractCourseId(currentUrl);
+
+        var selected = _vm.SelectedCourse;
+        if (selected is not null && !IsGenericCourseTitle(selected.Title) &&
+            (string.IsNullOrWhiteSpace(currentCourseId) || SameCourseContext(selected.Url, currentUrl)))
+            return selected.Title.Trim();
+
+        var matched = _vm.Courses.FirstOrDefault(x =>
+            !IsGenericCourseTitle(x.Title) && SameCourseContext(x.Url, currentUrl));
+        if (matched is not null) return matched.Title.Trim();
+
+        if (!IsGenericCourseTitle(recognizedTitle)) return recognizedTitle!.Trim();
+
+        // 上次课程只允许在 URL 能证明仍是同一门课时兜底，避免手动进入另一门课后右侧还显示旧课程名。
+        var last = App.Settings.Current.LastCourseTitle;
+        if (!IsGenericCourseTitle(last) && SameCourseContext(App.Settings.Current.LastCourseUrl, currentUrl))
+            return last.Trim();
+
+        return string.Empty;
+    }
+
+    private static bool IsGenericCourseTitle(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return true;
+        var title = value.Trim();
+        return title.Equals("学习通", StringComparison.OrdinalIgnoreCase) ||
+               title.Equals("课程", StringComparison.OrdinalIgnoreCase) ||
+               title.Equals("我的课程", StringComparison.OrdinalIgnoreCase) ||
+               title.Equals("学生学习页面", StringComparison.OrdinalIgnoreCase) ||
+               title.Equals("学生学习", StringComparison.OrdinalIgnoreCase) ||
+               title.Equals("学习页面", StringComparison.OrdinalIgnoreCase) ||
+               title.Equals("课程学习", StringComparison.OrdinalIgnoreCase) ||
+               title.Equals("章节学习", StringComparison.OrdinalIgnoreCase) ||
+               title.Equals("任务学习", StringComparison.OrdinalIgnoreCase) ||
+               title.Equals("学生课程", StringComparison.OrdinalIgnoreCase) ||
+               title.Equals("返回课程", StringComparison.OrdinalIgnoreCase) ||
+               title.Equals("提示", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void SyncCurrentCourseCard(string courseTitle)
+    {
+        var currentUrl = Browser.Source?.ToString() ?? string.Empty;
+        if (!ChaoxingUrlClassifier.IsStudyUri(currentUrl) || IsGenericCourseTitle(courseTitle))
+            return;
+
+        var matching = _vm.Courses.FirstOrDefault(x => SameCourseContext(x.Url, currentUrl));
+        if (matching is null)
+        {
+            matching = new CourseItem { Title = courseTitle.Trim(), Url = currentUrl };
+            _vm.Courses.Add(matching);
+        }
+        else
+        {
+            matching.Title = courseTitle.Trim();
+        }
+
+        foreach (var invalid in _vm.Courses.Where(x => IsGenericCourseTitle(x.Title)).ToArray())
+            _vm.Courses.Remove(invalid);
+        _vm.SelectedCourse = matching;
+        _courseCacheService.Save(_vm.Courses);
+    }
+
+    private static string NormalizeTitleKey(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var chars = value.Trim()
+            .Where(ch => !char.IsWhiteSpace(ch) && !char.IsPunctuation(ch) && !char.IsSymbol(ch))
+            .ToArray();
+        return new string(chars).ToLowerInvariant();
+    }
+
+    private static bool TitlesLikelyMatch(string? left, string? right)
+    {
+        var a = NormalizeTitleKey(left);
+        var b = NormalizeTitleKey(right);
+        if (a.Length < 2 || b.Length < 2) return false;
+        return string.Equals(a, b, StringComparison.OrdinalIgnoreCase) ||
+               (a.Length >= 4 && b.Contains(a, StringComparison.OrdinalIgnoreCase)) ||
+               (b.Length >= 4 && a.Contains(b, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string VideoTaskIdentity(VideoTaskItem task)
+    {
+        if (!string.IsNullOrWhiteSpace(task.TaskKey)) return task.TaskKey;
+        if (!string.IsNullOrWhiteSpace(task.Source)) return $"src:{task.Source}";
+        if (!string.IsNullOrWhiteSpace(task.MediaId))
+            return $"media:{task.MediaId}|doc:{task.DocumentUrl}|dom:{task.DomIndex}";
+        return $"doc:{task.DocumentUrl}|dom:{task.DomIndex}|title:{task.Title}";
+    }
+
+    private void BindVideoTasksToChapters(
+        IReadOnlyList<ChapterItem> chapters,
+        IReadOnlyList<VideoTaskItem> tasks,
+        PlayerSnapshot? playerEvidence,
+        string currentUrl)
+    {
+        foreach (var chapter in chapters)
+            chapter.VideoTasks = new List<VideoTaskItem>();
+
+        var active = chapters.Where(x => x.IsActive).ToArray();
+        var singleActive = active.Length == 1 ? active[0] : null;
+        var currentUrlChapterId = ExtractChapterId(currentUrl);
+
+        foreach (var task in tasks)
+        {
+            ChapterItem? chapter = null;
+            var taskChapterId = !string.IsNullOrWhiteSpace(task.ChapterId)
+                ? task.ChapterId
+                : ExtractChapterId(task.DocumentUrl);
+
+            if (!string.IsNullOrWhiteSpace(taskChapterId))
+            {
+                chapter = chapters.FirstOrDefault(x =>
+                    string.Equals(x.ChapterId, taskChapterId, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (chapter is null && !string.IsNullOrWhiteSpace(task.ChapterTitle))
+                chapter = chapters.FirstOrDefault(x => TitlesLikelyMatch(x.Title, task.ChapterTitle));
+
+            // 对没有 chapterId 的 iframe，只把“当前可见/正在播放”的真实任务绑定给唯一 active 章节。
+            // 不把整页所有未知任务都塞给 active 章节，避免统计和下一视频再次错位。
+            if (chapter is null && singleActive is not null && (task.IsPlaying || task.IsVisible))
+            {
+                var playerDocumentMatches = playerEvidence?.Found == true &&
+                    !string.IsNullOrWhiteSpace(playerEvidence.DocumentUrl) &&
+                    string.Equals(task.DocumentUrl, playerEvidence.DocumentUrl, StringComparison.OrdinalIgnoreCase);
+                var activeMatchesUrl = !string.IsNullOrWhiteSpace(currentUrlChapterId) &&
+                    string.Equals(singleActive.ChapterId, currentUrlChapterId, StringComparison.OrdinalIgnoreCase);
+                if (playerDocumentMatches || activeMatchesUrl || string.IsNullOrWhiteSpace(currentUrlChapterId))
+                    chapter = singleActive;
+            }
+
+            if (chapter is null) continue;
+            if (string.IsNullOrWhiteSpace(task.ChapterId)) task.ChapterId = chapter.ChapterId;
+            if (string.IsNullOrWhiteSpace(task.ChapterTitle)) task.ChapterTitle = chapter.Title;
+            chapter.VideoTasks.Add(task);
+        }
+
+        foreach (var chapter in chapters)
+        {
+            if (chapter.VideoTasks.Count == 0) continue;
+            chapter.TaskType = TaskType.Video;
+
+            if (chapter.VideoTasks.Any(x => x.CompletionKnown && !x.IsCompleted))
+            {
+                chapter.CompletionKnown = true;
+                chapter.IsCompleted = false;
+            }
+            else if (chapter.VideoTasks.All(x => x.CompletionKnown) &&
+                     chapter.VideoTasks.All(x => x.IsCompleted))
+            {
+                chapter.CompletionKnown = true;
+                chapter.IsCompleted = true;
+            }
+            else
+            {
+                // 只要仍有状态未知的视频，就不能沿用目录行可能过时的“已完成”标记。
+                // 未知视频保留为待核验候选，避免自动续播把真正没看的章节跳过去。
+                chapter.CompletionKnown = false;
+                chapter.IsCompleted = false;
+            }
+        }
+    }
+
+    private VideoTaskItem? ResolveVideoTaskFromPlayer(PlayerSnapshot? player)
+        => ResolveVideoTaskFromPlayer(player, _vm.VideoTasks);
+
+    private static VideoTaskItem? ResolveVideoTaskFromPlayer(
+        PlayerSnapshot? player,
+        IEnumerable<VideoTaskItem> candidates)
+    {
+        if (player?.Found != true) return null;
+        var tasks = candidates.ToArray();
+        if (tasks.Length == 0) return null;
+
+        // TaskKey 是同一轮扫描里最具体的身份，优先于 Source。
+        // 学习通可能让多个任务复用同一个媒体 URL，只按 Source 会把播放器绑到错误章节。
+        if (!string.IsNullOrWhiteSpace(player.TaskKey))
+        {
+            var byKey = tasks.FirstOrDefault(x =>
                 string.Equals(x.TaskKey, player.TaskKey, StringComparison.OrdinalIgnoreCase));
             if (byKey is not null) return byKey;
         }
