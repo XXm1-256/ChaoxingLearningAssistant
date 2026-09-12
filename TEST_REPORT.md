@@ -11,7 +11,8 @@
 - 用户版 ZIP：通过；顶层仅 DOCX、PDF、Markdown 教学与程序次级文件夹，解压后隐藏启动 6 秒保持运行。
 - 开发者版 ZIP：通过；顶层为单一 `ChaoxingLearningAssistant_v1.37` 目录，包含源码、累计档案和 MASTER。
 - MASTER：UTF-8 BOM 存在，无替换字符；内嵌载荷可恢复 153 个清单文件，逐文件哈希差异 0。
-- GitHub 同步结果将在完成后补记。
+- GitHub 公开源码：已通过 GitHub 插件同步到 `main`，最终源码提交为 `16c58d8cea19da37b87393ef272128de9d14eed1`；README、v1.37 Release 与关键源码已抽查。
+- GitHub Release 附件：当前插件仍没有创建 Release 或上传二进制附件接口；普通版 ZIP 已在本地完成结构和启动验证，没有将“本地已生成”写成“线上已上传”。
 - 真实学习通账号页面：尚待用成品验证；自动测试不冒充平台实测。
 
 ## v1.36 懒加载视频与未完成章节操作回归 2026 09 11
