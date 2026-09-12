@@ -768,6 +768,24 @@ public partial class MainWindow : Window
         }
     }
 
+    private async Task RefreshCatalogUntilStatusReadyAsync(PlayerSnapshot? playerEvidence = null, bool preserveSelection = true)
+    {
+        await RefreshChaptersInternalAsync(silent: true, playerEvidence: playerEvidence, preserveSelection: preserveSelection);
+
+        // 学习通会先画出章节标题，稍后才补任务状态。仅在目录仍只有“未知”候选时
+        // 等待并重扫，避免把尚未加载状态的已完成章节当成待核验目标。
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            if (_isClosing || _isNavigating ||
+                FindFirstUnfinishedNavigationCandidate(_vm.Chapters) is not null ||
+                !_vm.Chapters.Any(x => x.IsNavigationCandidate && !x.CompletionKnown))
+                return;
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500 + attempt * 250), _lifetimeCts.Token);
+            await RefreshChaptersInternalAsync(silent: true, playerEvidence: playerEvidence, preserveSelection: preserveSelection);
+        }
+    }
+
     private async Task PollPlayerAsync(bool force = false)
     {
         if (_isClosing || _isNavigating || _pollInProgress || _adapter is null || Browser.CoreWebView2 is null || _loginPageActive)
@@ -1545,7 +1563,7 @@ public partial class MainWindow : Window
     private async Task VerifyCourseCompletionOrContinueAsync(PlayerSnapshot endedSnapshot, int currentIndex)
     {
         EnsureCourseTraversalStarted(currentIndex);
-        await RefreshChaptersInternalAsync(silent: true, playerEvidence: endedSnapshot, preserveSelection: true);
+        await RefreshCatalogUntilStatusReadyAsync(endedSnapshot, preserveSelection: true);
         if (_isClosing || _automationPaused) return;
 
         if (_vm.Chapters.Count == 0)
@@ -2323,7 +2341,7 @@ public partial class MainWindow : Window
 
             if (ChaoxingUrlClassifier.IsStudyUri(Browser.Source?.ToString()))
             {
-                await RefreshChaptersInternalAsync(silent: true);
+                await RefreshCatalogUntilStatusReadyAsync();
                 if (!IsCurrentPage(pageVersion)) return;
                 var preferred = FindFirstUnfinishedNavigationCandidate(_vm.Chapters);
                 if (preferred is not null && !ChapterMatchesUri(preferred, Browser.Source?.ToString()) && !IsConfirmedChapter(preferred))
@@ -2625,7 +2643,7 @@ public partial class MainWindow : Window
         ShowInAppNotice("查找未完成视频", "正在刷新任务点和章节状态。", false);
         try
         {
-            await RefreshChaptersInternalAsync(silent: false);
+            await RefreshCatalogUntilStatusReadyAsync();
             var chapter = FindFirstUnfinishedNavigationCandidate(_vm.Chapters) ??
                           FindFirstPendingNavigationCandidate(_vm.Chapters);
             if (chapter is null)

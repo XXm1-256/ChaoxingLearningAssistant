@@ -257,17 +257,21 @@ public sealed class ChaoxingAdapter : IDisposable
     return '';
   };
   const completionState = node => {
-    const own = normalize([
-      node?.getAttribute?.('class'), node?.getAttribute?.('title'), node?.getAttribute?.('aria-label'),
-      node?.innerText, node?.textContent,
-      node?.querySelector?.('.catalog_name,.chapter_name,.chapterText,.articlename,h4 > a')?.innerText,
-      (node?.outerHTML || '').slice(0, 2200)
+    // innerText only contains the currently rendered state. textContent/outerHTML can include
+    // hidden finished/unfinished icon templates, so they must never override visible evidence.
+    const visible = normalize([
+      node?.getAttribute?.('title'), node?.getAttribute?.('aria-label'), node?.innerText,
+      node?.querySelector?.('.catalog_name,.chapter_name,.chapterText,.articlename,h4 > a')?.innerText
     ].filter(Boolean).join(' '));
-    if (/未完成|未看完|待完成|待完成任务点|未通过|未开始|进行中|not\s+(?:completed|finished)|incomplete|unfinished/i.test(own)) return false;
-    if (/jobUnfinishCount\s*[:=]?\s*[1-9]\d*/i.test(own)) return false;
-    if (node?.querySelector?.('.orange01,.ans-job-unfinished,.ans-job-unfinish,[class*="unfinished"],[class*="unfinish"],[class*="icon_not"]')) return false;
-    if (/已完成|已看完|全部完成|\b(?:finished|completed)\b/i.test(own)) return true;
-    if (node?.querySelector?.('.ans-job-finished,[class~="finished"],[class*="icon_finished"]')) return true;
+    if (/未完成|未看完|待完成|待完成任务点|未通过|未开始|进行中|not\s+(?:completed|finished)|incomplete|unfinished/i.test(visible)) return false;
+    if (/已完成|已看完|全部完成|\b(?:finished|completed)\b/i.test(visible)) return true;
+    const markup = (node?.outerHTML || '').slice(0, 2200);
+    const count = markup.match(/jobUnfinishCount["']?\s*[:=]\s*["']?(\d+)/i);
+    if (count) return Number(count[1]) === 0;
+    const unfinished = node?.querySelector?.('.orange01,.ans-job-unfinished,.ans-job-unfinish,[class*="unfinished"],[class*="unfinish"],[class*="icon_not"]');
+    const finished = node?.querySelector?.('.ans-job-finished,[class~="finished"],[class*="icon_finished"]');
+    if (finished && !unfinished) return true;
+    if (unfinished && !finished) return false;
     return null;
   };
   const detect = node => {
@@ -463,11 +467,16 @@ public sealed class ChaoxingAdapter : IDisposable
     attr(block?.querySelector?.('iframe'),'mid')
   ].map(norm).find(Boolean) || '';
   const completion = el => {
-    const text = norm((el?.innerText || el?.textContent || '') + ' ' + (el?.outerHTML || '').slice(0,4200));
-    if (/未完成|未看完|待完成|待完成任务点|未开始|进行中|incomplete|unfinished/i.test(text)) return false;
-    if (/jobUnfinishCount\s*[:=]?\s*[1-9]\d*/i.test(text)) return false;
-    if (el?.querySelector?.('.orange01,.ans-job-unfinished,.ans-job-unfinish,[class*="unfinished"],[class*="unfinish"],[class*="icon_not"]')) return false;
-    if (/已完成|已看完|全部完成|\b(?:finished|completed)\b/i.test(text) || el?.querySelector?.('.ans-job-finished,[class~="finished"],[class*="icon_finished"]')) return true;
+    const visible = norm(el?.innerText || '');
+    if (/未完成|未看完|待完成|待完成任务点|未开始|进行中|incomplete|unfinished/i.test(visible)) return false;
+    if (/已完成|已看完|全部完成|\b(?:finished|completed)\b/i.test(visible)) return true;
+    const markup = (el?.outerHTML || '').slice(0,4200);
+    const count = markup.match(/jobUnfinishCount["']?\s*[:=]\s*["']?(\d+)/i);
+    if (count) return Number(count[1]) === 0;
+    const unfinished = el?.querySelector?.('.orange01,.ans-job-unfinished,.ans-job-unfinish,[class*="unfinished"],[class*="unfinish"],[class*="icon_not"]');
+    const finished = el?.querySelector?.('.ans-job-finished,[class~="finished"],[class*="icon_finished"]');
+    if (finished && !unfinished) return true;
+    if (unfinished && !finished) return false;
     return null;
   };
   const titleOf = (v, block) => {
@@ -649,11 +658,16 @@ public sealed class ChaoxingAdapter : IDisposable
     return value && value.length <= 180 ? value : '';
   };
   const completion = el => {
-    const text = norm((el?.innerText || el?.textContent || '') + ' ' + (el?.outerHTML || '').slice(0,2600));
-    if (/未完成|未看完|待完成|待完成任务点|未开始|进行中|incomplete|unfinished/i.test(text)) return false;
-    if (/jobUnfinishCount\s*[:=]?\s*[1-9]\d*/i.test(text)) return false;
-    if (el?.querySelector?.('.orange01,.ans-job-unfinished,.ans-job-unfinish,[class*="unfinished"],[class*="unfinish"]')) return false;
-    if (/已完成|已看完|全部完成|\b(?:finished|completed)\b/i.test(text) || el?.querySelector?.('.ans-job-finished,[class~="finished"]')) return true;
+    const visible = norm(el?.innerText || '');
+    if (/未完成|未看完|待完成|待完成任务点|未开始|进行中|incomplete|unfinished/i.test(visible)) return false;
+    if (/已完成|已看完|全部完成|\b(?:finished|completed)\b/i.test(visible)) return true;
+    const markup = (el?.outerHTML || '').slice(0,2600);
+    const count = markup.match(/jobUnfinishCount["']?\s*[:=]\s*["']?(\d+)/i);
+    if (count) return Number(count[1]) === 0;
+    const unfinished = el?.querySelector?.('.orange01,.ans-job-unfinished,.ans-job-unfinish,[class*="unfinished"],[class*="unfinish"]');
+    const finished = el?.querySelector?.('.ans-job-finished,[class~="finished"]');
+    if (finished && !unfinished) return true;
+    if (unfinished && !finished) return false;
     return null;
   };
   const detect = el => {
@@ -1075,10 +1089,16 @@ public sealed class ChaoxingAdapter : IDisposable
 (() => {
   const norm = s => (s || '').replace(/\s+/g,' ').trim();
   const completion = el => {
-    const text = norm((el?.innerText || el?.textContent || '') + ' ' + (el?.outerHTML || '').slice(0,3200));
-    if (/未完成|未看完|待完成|待完成任务点|未开始|进行中|incomplete|unfinished/i.test(text)) return false;
-    if (el?.querySelector?.('.orange01,.ans-job-unfinished,.ans-job-unfinish,[class*="unfinished"],[class*="unfinish"]')) return false;
-    if (/已完成|已看完|全部完成|\b(?:finished|completed)\b/i.test(text) || el?.querySelector?.('.ans-job-finished,[class~="finished"]')) return true;
+    const visible = norm(el?.innerText || '');
+    if (/未完成|未看完|待完成|待完成任务点|未开始|进行中|incomplete|unfinished/i.test(visible)) return false;
+    if (/已完成|已看完|全部完成|\b(?:finished|completed)\b/i.test(visible)) return true;
+    const markup = (el?.outerHTML || '').slice(0,3200);
+    const count = markup.match(/jobUnfinishCount["']?\s*[:=]\s*["']?(\d+)/i);
+    if (count) return Number(count[1]) === 0;
+    const unfinished = el?.querySelector?.('.orange01,.ans-job-unfinished,.ans-job-unfinish,[class*="unfinished"],[class*="unfinish"]');
+    const finished = el?.querySelector?.('.ans-job-finished,[class~="finished"]');
+    if (finished && !unfinished) return true;
+    if (unfinished && !finished) return false;
     return null;
   };
   const isVideoTask = el => {
@@ -1380,10 +1400,16 @@ public sealed class ChaoxingAdapter : IDisposable
   };
   const sourceOf = v => norm(v?.currentSrc || v?.src || '');
   const completion = el => {
-    const text = norm((el?.innerText || el?.textContent || '') + ' ' + (el?.outerHTML || '').slice(0,3200));
-    if (/未完成|未看完|待完成|待完成任务点|未开始|进行中|incomplete|unfinished/i.test(text)) return false;
-    if (el?.querySelector?.('.orange01,.ans-job-unfinished,.ans-job-unfinish,[class*="unfinished"],[class*="unfinish"]')) return false;
-    if (/已完成|已看完|全部完成|\b(?:finished|completed)\b/i.test(text) || el?.querySelector?.('.ans-job-finished,[class~="finished"]')) return true;
+    const visible = norm(el?.innerText || '');
+    if (/未完成|未看完|待完成|待完成任务点|未开始|进行中|incomplete|unfinished/i.test(visible)) return false;
+    if (/已完成|已看完|全部完成|\b(?:finished|completed)\b/i.test(visible)) return true;
+    const markup = (el?.outerHTML || '').slice(0,3200);
+    const count = markup.match(/jobUnfinishCount["']?\s*[:=]\s*["']?(\d+)/i);
+    if (count) return Number(count[1]) === 0;
+    const unfinished = el?.querySelector?.('.orange01,.ans-job-unfinished,.ans-job-unfinish,[class*="unfinished"],[class*="unfinish"]');
+    const finished = el?.querySelector?.('.ans-job-finished,[class~="finished"]');
+    if (finished && !unfinished) return true;
+    if (unfinished && !finished) return false;
     return null;
   };
   const videos = Array.from(document.querySelectorAll('video'));

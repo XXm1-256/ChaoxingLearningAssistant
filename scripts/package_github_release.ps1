@@ -8,11 +8,14 @@ $Publish = Join-Path $Root 'artifacts\publish\win-x64'
 $Stage = Join-Path $Root ('artifacts\github-release-' + [Guid]::NewGuid().ToString('N'))
 $ProgramFolderName = -join @(0x5B66,0x4E60,0x901A,0x8BFE,0x7A0B,0x89C6,0x9891,0x64AD,0x653E,0x52A9,0x624B | ForEach-Object { [char]$_ })
 $Program = Join-Path $Stage $ProgramFolderName
-$Destination = Join-Path $OutputDirectory 'ChaoxingLearningAssistant_v1.39_Windows.zip'
+$Destination = Join-Path $OutputDirectory 'ChaoxingLearningAssistant_v1.40_Windows.zip'
 $TutorialMarkdown = Join-Path $Root '使用教学.md'
 $TutorialDocx = Join-Path $Root '使用教学.docx'
 $TutorialPdf = Join-Path $Root '使用教学.pdf'
-foreach ($tutorial in @($TutorialMarkdown, $TutorialDocx, $TutorialPdf)) {
+$FaqMarkdown = Join-Path $Root '常见问题与处理方法.md'
+$FaqDocx = Join-Path $Root '常见问题与处理方法.docx'
+$FaqPdf = Join-Path $Root '常见问题与处理方法.pdf'
+foreach ($tutorial in @($TutorialMarkdown, $TutorialDocx, $TutorialPdf, $FaqMarkdown, $FaqDocx, $FaqPdf)) {
     if (-not (Test-Path -LiteralPath $tutorial)) { throw "Tutorial file is missing: $tutorial" }
 }
 
@@ -25,6 +28,9 @@ try {
     Copy-Item -LiteralPath $TutorialMarkdown -Destination $Stage
     Copy-Item -LiteralPath $TutorialDocx -Destination $Stage
     Copy-Item -LiteralPath $TutorialPdf -Destination $Stage
+    Copy-Item -LiteralPath $FaqMarkdown -Destination $Stage
+    Copy-Item -LiteralPath $FaqDocx -Destination $Stage
+    Copy-Item -LiteralPath $FaqPdf -Destination $Stage
     Get-ChildItem -LiteralPath $Publish | Where-Object {
         $_.Name -notin @('Data', 'WebView2', 'Logs', 'Diagnostics', 'portable.flag')
     } | Copy-Item -Destination $Program -Recurse -Force
@@ -36,7 +42,10 @@ try {
     $TutorialMarkdownStage = Join-Path $Stage ([System.IO.Path]::GetFileName($TutorialMarkdown))
     $TutorialDocxStage = Join-Path $Stage ([System.IO.Path]::GetFileName($TutorialDocx))
     $TutorialPdfStage = Join-Path $Stage ([System.IO.Path]::GetFileName($TutorialPdf))
-    Compress-Archive -LiteralPath $TutorialMarkdownStage,$TutorialDocxStage,$TutorialPdfStage,$Program -DestinationPath $Destination -CompressionLevel Optimal
+    $FaqMarkdownStage = Join-Path $Stage ([System.IO.Path]::GetFileName($FaqMarkdown))
+    $FaqDocxStage = Join-Path $Stage ([System.IO.Path]::GetFileName($FaqDocx))
+    $FaqPdfStage = Join-Path $Stage ([System.IO.Path]::GetFileName($FaqPdf))
+    Compress-Archive -LiteralPath $TutorialMarkdownStage,$TutorialDocxStage,$TutorialPdfStage,$FaqMarkdownStage,$FaqDocxStage,$FaqPdfStage,$Program -DestinationPath $Destination -CompressionLevel Optimal
 }
 finally {
     if (Test-Path -LiteralPath $Stage) {

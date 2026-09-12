@@ -144,6 +144,43 @@ for (const [status, completed] of [
   });
 }
 
+test('visible completed chapter beats hidden unfinished templates', () => {
+  const marker = {};
+  const container = {
+    innerText: '第一节 视频 已完成',
+    textContent: '第一节 视频 已完成 未完成',
+    outerHTML: '<div data-jobUnfinishCount="0"><span>已完成</span><span hidden class="ans-job-unfinished">未完成</span><i class="ans-job-finished"></i></div>',
+    className: 'chapter_item',
+    getAttribute: () => '',
+    querySelector: selector => selector.includes('unfinished') ? marker : (selector.includes('finished') ? marker : null),
+  };
+  const node = {
+    innerText: '第一节', textContent: '第一节',
+    href: 'https://example.test/studentstudy?chapterId=1',
+    closest: () => container, getAttribute: () => '', querySelector: () => null,
+  };
+  const result = evaluate('ScanChaptersAsync', [node]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].completionKnown, true);
+  assert.equal(result[0].isCompleted, true);
+});
+
+test('zero unfinished-count completes a chapter without visible status text', () => {
+  const container = {
+    innerText: '第一节 视频', textContent: '第一节 视频 未完成',
+    outerHTML: '<div data-jobUnfinishCount="0"><span hidden>未完成</span></div>',
+    className: 'chapter_item', getAttribute: () => '', querySelector: () => null,
+  };
+  const node = {
+    innerText: '第一节', textContent: '第一节',
+    href: 'https://example.test/studentstudy?chapterId=1',
+    closest: () => container, getAttribute: () => '', querySelector: () => null,
+  };
+  const result = evaluate('ScanChaptersAsync', [node]);
+  assert.equal(result[0].completionKnown, true);
+  assert.equal(result[0].isCompleted, true);
+});
+
 function video(overrides = {}) {
   return { currentTime: 25, duration: 100, playbackRate: 1, paused: true, ended: false,
     readyState: 4, currentSrc: 'video.mp4', src: '',
@@ -536,6 +573,26 @@ test('v1.22 video-task scanner keeps chapter, title and explicit unfinished stat
   assert.equal(result[0].isCompleted, false);
   assert.equal(result[0].isPlaying, true);
   assert.match(result[0].taskKey, /object-a/);
+});
+
+test('video-task scanner does not replay a visibly completed task because of a hidden unfinished template', () => {
+  const marker = {};
+  const block = {
+    innerText: '视频 已完成', textContent: '视频 已完成 未完成',
+    outerHTML: '<div class="ans-video" data-objectid="done-video" data-jobUnfinishCount="0"><span hidden class="ans-job-unfinished">未完成</span><i class="ans-job-finished"></i></div>',
+    className: 'ans-video',
+    getAttribute: key => key === 'data-objectid' ? 'done-video' : '',
+    querySelector: selector => selector === 'video' ? v : (selector.includes('unfinished') ? marker : (selector.includes('finished') ? marker : null)),
+    getBoundingClientRect: () => ({ width: 640, height: 360 }),
+  };
+  const v = video({ currentSrc: 'https://cdn.example/done.mp4', getAttribute: () => '', closest: () => block });
+  const result = vm.runInNewContext(script('ScanVideoTasksAsync'), {
+    document: { querySelectorAll: selector => selector === 'video' ? [v] : (selector.includes('.ans-video') ? [block] : []) },
+    location: { href: 'https://example.test/studentstudy?chapterId=done' }, URL,
+  }, { timeout: 1000 });
+  assert.equal(result.length, 1);
+  assert.equal(result[0].completionKnown, true);
+  assert.equal(result[0].isCompleted, true);
 });
 
 test('v1.22 page recognition never promotes generic 学生学习页面 into a course name', () => {
