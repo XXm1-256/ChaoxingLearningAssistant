@@ -348,6 +348,49 @@ test('expanded native chapter-click embedded script parses', () => {
   assert.doesNotThrow(() => new vm.Script(code));
 });
 
+test('catalog bootstrap skips a quiz and opens the first real chapter', () => {
+  let quizClicks = 0;
+  let chapterClicks = 0;
+  const catalogNode = (title, href, click) => {
+    const node = {
+      id: '', innerText: title, textContent: title, href,
+      getAttribute: key => key === 'href' ? href : key === 'title' ? title : '',
+      closest: selector => selector.includes('.ans-attach-ct') ? null : node,
+      querySelector: () => null,
+      getBoundingClientRect: () => ({ width: 180, height: 32 }),
+      scrollIntoView: () => {}, click,
+    };
+    return node;
+  };
+  const quiz = catalogNode('章节测验', 'https://example.test/studentstudy?chapterId=quiz', () => quizClicks++);
+  const chapter = catalogNode('第一章 文学概论', 'https://example.test/studentstudy?chapterId=chapter-1', () => chapterClicks++);
+  const result = vm.runInNewContext(script('BootstrapChapterCatalogAsync'), {
+    document: { querySelectorAll: () => [quiz, chapter] },
+    location: { href: 'https://example.test/course/' }, URL,
+  }, { timeout: 1000 });
+  assert.equal(result, true);
+  assert.equal(quizClicks, 0);
+  assert.equal(chapterClicks, 1);
+});
+
+test('catalog bootstrap does not click a generic course control', () => {
+  let clicks = 0;
+  const back = {
+    id: '', innerText: '返回课程', textContent: '返回课程', href: 'https://example.test/studentstudy?chapterId=back',
+    getAttribute: key => key === 'href' ? 'https://example.test/studentstudy?chapterId=back' : key === 'title' ? '返回课程' : '',
+    closest: selector => selector.includes('.ans-attach-ct') ? null : back,
+    querySelector: () => null,
+    getBoundingClientRect: () => ({ width: 180, height: 32 }),
+    click: () => clicks++,
+  };
+  const result = vm.runInNewContext(script('BootstrapChapterCatalogAsync'), {
+    document: { querySelectorAll: () => [back] },
+    location: { href: 'https://example.test/course/' }, URL,
+  }, { timeout: 1000 });
+  assert.equal(result, false);
+  assert.equal(clicks, 0);
+});
+
 test('chapter titles drop status/task suffix noise', () => {
   const result = evaluate('ScanChaptersAsync', [modernCatalogChapter()]);
   assert.equal(result[0].title, '第三节');

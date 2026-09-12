@@ -127,15 +127,15 @@ if app_xaml.exists():
         if count != 1:
             errors.append(f"UI-REV regression: expected exactly one implicit {target} style, found {count}")
 
-launcher = ROOT / "BUILD_V1_40.bat"
+launcher = ROOT / "BUILD_V1_41.bat"
 if not launcher.exists():
-    errors.append("Missing BUILD_V1_40.bat")
+    errors.append("Missing BUILD_V1_41.bat")
 else:
     raw = launcher.read_bytes()
     if raw.startswith(b"\xef\xbb\xbf") or any(ch >= 128 for ch in raw):
-        errors.append("BUILD_V1_40.bat must remain ASCII/no-BOM")
-    if b"Build v1.40" not in raw:
-        errors.append("BUILD_V1_40.bat version banner mismatch")
+        errors.append("BUILD_V1_41.bat must remain ASCII/no-BOM")
+    if b"Build v1.41" not in raw:
+        errors.append("BUILD_V1_41.bat version banner mismatch")
 
 
 # v1.10 real-runtime UI acceptance regression guards.
@@ -193,11 +193,11 @@ if main_xaml.exists():
             errors.append("ERR-RUNTIME-001 regression: ProgressPercent ProgressBar binding must be Mode=OneWay")
 
 
-launcher_v112 = ROOT / "BUILD_V1_40.bat"
+launcher_v112 = ROOT / "BUILD_V1_41.bat"
 if launcher_v112.exists():
     launcher_text_v112 = launcher_v112.read_text(encoding="ascii", errors="ignore")
-    if "Build Log v1.40" not in launcher_text_v112:
-        errors.append("VER-MGMT-002 regression: BUILD_LOG header must match v1.40")
+    if "Build Log v1.41" not in launcher_text_v112:
+        errors.append("VER-MGMT-002 regression: BUILD_LOG header must match v1.41")
 
 # v1.13: inspect XML attribute values rather than stopping at StringFormat's nested braces.
 for path in ROOT.rglob("*.xaml"):
@@ -215,8 +215,8 @@ for path in ROOT.rglob("*.xaml"):
                 errors.append(f"ERR-RUNTIME-002: display-only {tag}.{name} requires OneWay: {path.relative_to(ROOT)}")
 
 project_xml = ET.parse(ROOT / "src/ChaoxingLearningAssistant/ChaoxingLearningAssistant.csproj")
-if project_xml.findtext(".//Version") != "1.40.0":
-    errors.append("Project version must be 1.40.0")
+if project_xml.findtext(".//Version") != "1.41.0":
+    errors.append("Project version must be 1.41.0")
 
 # v1.14: chapter catalog, continuous playback, and login-stability guards.
 chapter_model = ROOT / "src/ChaoxingLearningAssistant/Models/ChapterItem.cs"
@@ -401,7 +401,7 @@ for path in visible_xaml:
 if main_xaml.exists():
     ui_v119 = main_xaml.read_text(encoding="utf-8-sig", errors="ignore")
     for token in (
-        'Title="学习通课程视频播放助手 v1.40"',
+        'Title="学习通课程视频播放助手 v1.41"',
         'Text="课程目录"',
         'Text="运行状态"',
         'Text="下一视频"',
@@ -848,7 +848,7 @@ url_classifier = ROOT / "src" / "ChaoxingLearningAssistant" / "Chaoxing" / "Chao
 for path, tokens in {
     url_classifier: ("MayContainChapterCatalogUri", "studentcourse", '"/visit/courses"'),
     main_xaml: ('PreviewMouseLeftButtonDown="CourseList_PreviewMouseLeftButtonDown"',),
-    main_cs: ("CourseList_PreviewMouseLeftButtonDown", "LibraryTabs.SelectedIndex = 1", "MayContainChapterCatalogUri", "章节目录仍在加载"),
+    main_cs: ("CourseList_PreviewMouseLeftButtonDown", "LibraryTabs.SelectedIndex = 1", "MayContainChapterCatalogUri", "章节目录未能加载"),
 }.items():
     source = path.read_text(encoding="utf-8-sig", errors="ignore")
     for token in tokens:
@@ -869,16 +869,17 @@ for path, tokens in {
         if token not in source:
             errors.append(f"v1.39 regression: {path.name} missing {token}")
 
-# v1.40 ignores hidden status templates and waits for asynchronously populated
-# catalog status before choosing an unknown chapter.
+# v1.41 initializes a missing catalog and accepts a target only after repeated
+# identical full-catalog observations.
 for path, tokens in {
-    adapter_cs: ('const visible = normalize([', 'jobUnfinishCount["\']?', 'if (finished && !unfinished) return true;'),
-    main_cs: ('RefreshCatalogUntilStatusReadyAsync', 'FindFirstUnfinishedNavigationCandidate(_vm.Chapters) is not null'),
+    adapter_cs: ('BootstrapChapterCatalogAsync', '章节测验|测试|作业|签到|考试', 'documentVersionBeforeClick'),
+    main_cs: ('CatalogStatusFingerprint', 'stableScanCount >= 3', 'bootstrapWhenEmpty: true', 'CX-CATALOG-BOOTSTRAP'),
+    ROOT / "scripts" / "adapter_regression.mjs": ('catalog bootstrap skips a quiz', 'catalog bootstrap does not click a generic course control'),
 }.items():
     source = path.read_text(encoding="utf-8-sig", errors="ignore")
     for token in tokens:
         if token not in source:
-            errors.append(f"v1.40 regression: {path.name} missing {token}")
+            errors.append(f"v1.41 regression: {path.name} missing {token}")
 
 
 if errors:

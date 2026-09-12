@@ -1,5 +1,5 @@
 #define MyAppName "学习通课程播放辅助"
-#define MyAppVersion "1.40.0"
+#define MyAppVersion "1.41.0"
 #define MyAppPublisher "ChaoxingLearningAssistant"
 #define MyAppExeName "ChaoxingLearningAssistant.exe"
 

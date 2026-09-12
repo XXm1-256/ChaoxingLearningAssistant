@@ -428,7 +428,10 @@ public partial class MainWindow : Window
             if (_startAfterNavigation)
             {
                 _startAfterNavigation = false;
-                var first = FindFirstUnfinishedNavigationCandidate(_vm.Chapters);
+                await RefreshCatalogUntilStatusReadyAsync();
+                if (!IsCurrentPage(pageVersion)) return;
+                var first = FindFirstUnfinishedNavigationCandidate(_vm.Chapters) ??
+                            FindFirstPendingNavigationCandidate(_vm.Chapters);
 
                 if (first is not null)
                 {
@@ -768,22 +771,71 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task RefreshCatalogUntilStatusReadyAsync(PlayerSnapshot? playerEvidence = null, bool preserveSelection = true)
+    private async Task<bool> RefreshCatalogUntilStatusReadyAsync(
+        PlayerSnapshot? playerEvidence = null,
+        bool preserveSelection = true,
+        bool bootstrapWhenEmpty = false)
     {
-        await RefreshChaptersInternalAsync(silent: true, playerEvidence: playerEvidence, preserveSelection: preserveSelection);
+        string? previousFingerprint = null;
+        var stableScanCount = 0;
+        var bootstrapAttempted = false;
 
-        // 学习通会先画出章节标题，稍后才补任务状态。仅在目录仍只有“未知”候选时
-        // 等待并重扫，避免把尚未加载状态的已完成章节当成待核验目标。
-        for (var attempt = 0; attempt < 3; attempt++)
+        // 标题、任务类型和完成状态可能分批到达。至少连续三次读到完全相同的目录状态
+        // 才允许选目标，避免同一个按钮多点几次才偶然命中正确章节。
+        for (var attempt = 0; attempt < 6; attempt++)
         {
-            if (_isClosing || _isNavigating ||
-                FindFirstUnfinishedNavigationCandidate(_vm.Chapters) is not null ||
-                !_vm.Chapters.Any(x => x.IsNavigationCandidate && !x.CompletionKnown))
-                return;
-
-            await Task.Delay(TimeSpan.FromMilliseconds(500 + attempt * 250), _lifetimeCts.Token);
             await RefreshChaptersInternalAsync(silent: true, playerEvidence: playerEvidence, preserveSelection: preserveSelection);
+            if (_isClosing || _isNavigating)
+                return _isNavigating;
+
+            if (_vm.Chapters.Count == 0 && bootstrapWhenEmpty && !bootstrapAttempted && _adapter is not null)
+            {
+                bootstrapAttempted = true;
+                var pageVersionBeforeBootstrap = _pageVersion;
+                _startAfterNavigation = true;
+                var opened = await _adapter.BootstrapChapterCatalogAsync();
+                App.Logger.Info("CX-CATALOG-BOOTSTRAP", opened
+                    ? "目录尚未初始化，已自动打开首个真实章节以加载完整目录。"
+                    : "目录尚未初始化，页面中没有找到可安全打开的真实章节。 ");
+                if (opened)
+                {
+                    await Task.Delay(800, _lifetimeCts.Token);
+                    if (_isNavigating || !IsCurrentPage(pageVersionBeforeBootstrap))
+                        return true;
+                }
+                _startAfterNavigation = false;
+                previousFingerprint = null;
+                stableScanCount = 0;
+                continue;
+            }
+
+            var fingerprint = CatalogStatusFingerprint();
+            if (string.Equals(fingerprint, previousFingerprint, StringComparison.Ordinal))
+                stableScanCount++;
+            else
+            {
+                previousFingerprint = fingerprint;
+                stableScanCount = 1;
+            }
+
+            if (stableScanCount >= 3)
+                return false;
+
+            await Task.Delay(TimeSpan.FromMilliseconds(550 + attempt * 150), _lifetimeCts.Token);
         }
+
+        return false;
+    }
+
+    private string CatalogStatusFingerprint()
+    {
+        var chapters = _vm.Chapters
+            .OrderBy(x => x.Index)
+            .Select(x => $"{ChapterIdentity(x)}:{x.TaskType}:{x.CompletionKnown}:{x.IsCompleted}");
+        var tasks = _vm.VideoTasks
+            .OrderBy(x => x.Index)
+            .Select(x => $"{VideoTaskIdentity(x)}:{x.CompletionKnown}:{x.IsCompleted}");
+        return string.Join("|", chapters.Concat(tasks));
     }
 
     private async Task PollPlayerAsync(bool force = false)
@@ -2341,7 +2393,8 @@ public partial class MainWindow : Window
 
             if (ChaoxingUrlClassifier.IsStudyUri(Browser.Source?.ToString()))
             {
-                await RefreshCatalogUntilStatusReadyAsync();
+                if (await RefreshCatalogUntilStatusReadyAsync(bootstrapWhenEmpty: true))
+                    return;
                 if (!IsCurrentPage(pageVersion)) return;
                 var preferred = FindFirstUnfinishedNavigationCandidate(_vm.Chapters);
                 if (preferred is not null && !ChapterMatchesUri(preferred, Browser.Source?.ToString()) && !IsConfirmedChapter(preferred))
@@ -2643,7 +2696,8 @@ public partial class MainWindow : Window
         ShowInAppNotice("查找未完成视频", "正在刷新任务点和章节状态。", false);
         try
         {
-            await RefreshCatalogUntilStatusReadyAsync();
+            if (await RefreshCatalogUntilStatusReadyAsync(bootstrapWhenEmpty: true))
+                return;
             var chapter = FindFirstUnfinishedNavigationCandidate(_vm.Chapters) ??
                           FindFirstPendingNavigationCandidate(_vm.Chapters);
             if (chapter is null)
@@ -2651,7 +2705,7 @@ public partial class MainWindow : Window
                 if (_vm.Chapters.Count == 0 &&
                     ChaoxingUrlClassifier.MayContainChapterCatalogUri(Browser.Source?.ToString()))
                 {
-                    NotifyUser("章节目录仍在加载", "课程页面已经打开，程序会继续读取稍后出现的章节目录；读取完成后再点一次即可。", false);
+                    NotifyUser("章节目录未能加载", "程序已经尝试自动打开首个真实章节，但页面暂时没有提供可用的章节入口。可等待页面加载完成后再试。", false);
                     return;
                 }
                 NotifyUser("没有可打开的视频", "当前目录没有识别到未完成或待核验的视频任务；可先在网页目录打开目标章节，再点击开始。", false);

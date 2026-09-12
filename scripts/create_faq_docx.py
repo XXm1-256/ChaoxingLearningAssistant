@@ -60,7 +60,7 @@ for line in lines:
         style_run(paragraph.add_run(text), size=10.7, color=MUTED if text.startswith("适用于") else DARK)
 
 doc.core_properties.title = "学习通课程视频播放助手：常见问题与处理方法"
-doc.core_properties.subject = "学习通课程视频播放助手 v1.40 常见问题"
+doc.core_properties.subject = "学习通课程视频播放助手 v1.41 常见问题"
 doc.core_properties.author = "ChaoxingLearningAssistant"
 doc.save(OUTPUT)
 print(OUTPUT)

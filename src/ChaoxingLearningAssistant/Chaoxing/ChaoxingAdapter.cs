@@ -979,6 +979,68 @@ public sealed class ChaoxingAdapter : IDisposable
         finally { _playRequestInProgress = false; }
     }
 
+    public async Task<bool> BootstrapChapterCatalogAsync()
+    {
+        const string script = """
+(() => {
+  const norm = s => (s || '').replace(/\s+/g,' ').trim();
+  const taskPoint = el => !!el?.closest?.(
+    '.ans-attach-ct,.ans-job,.ans-videoquiz,.task-point,.taskPoint,[data-attachment],[data-objectid],[data-object-id]'
+  );
+  const hrefOf = el => {
+    const raw = el?.getAttribute?.('href') || el?.href || '';
+    if (!raw || /^javascript:/i.test(raw)) return '';
+    try { return new URL(raw, location.href).href; } catch { return ''; }
+  };
+  const identityOf = el => {
+    if (!el) return '';
+    const href = hrefOf(el);
+    if (/(?:chapterId|knowledgeId|knowledgeid)=/i.test(href)) return href;
+    const action = el.getAttribute?.('onclick') || '';
+    if (/toOld\s*\(/i.test(action)) return action;
+    return /^cur.+/i.test(String(el.id || '')) ? String(el.id) : '';
+  };
+  const clickableOf = node => {
+    if (!node) return null;
+    if (identityOf(node)) return node;
+    return node.querySelector?.(
+      '[onclick*="toOld"],a[href*="chapterId="],a[href*="knowledgeId="],a[href*="knowledgeid="],[id^="cur"][onclick]'
+    );
+  };
+  const titleOf = node => norm(
+    node?.querySelector?.('.catalog_name span[title],.chapter_Thats_bnt span[title],.catalog_name,.chapter_name,.chapterText,.articlename,h4 > a')?.getAttribute?.('title') ||
+    node?.querySelector?.('.catalog_name span[title],.chapter_Thats_bnt span[title],.catalog_name,.chapter_name,.chapterText,.articlename,h4 > a')?.innerText ||
+    node?.getAttribute?.('title') || node?.innerText || node?.textContent
+  );
+  const selectors = [
+    '.chapter_item','.chapter_unit','.catalog_title','.catalog_item','.posCatalog_select',
+    '.menulist-menu-title','.menulist-menu','.ncells','[id^="cur"]',
+    '[onclick*="toOld"]','a[href*="chapterId="]','a[href*="knowledgeId="]','a[href*="knowledgeid="]'
+  ];
+  const raw = Array.from(new Set(document.querySelectorAll(selectors.join(','))));
+  for (const item of raw) {
+    if (taskPoint(item)) continue;
+    const node = item.closest?.(
+      '.chapter_item,.chapter_unit,.catalog_item,.posCatalog_select,.menulist-menu-title,.menulist-menu,.ncells,li[id^="cur"],dd[id^="cur"],[id^="cur"]'
+    ) || item;
+    if (taskPoint(node)) continue;
+    const action = clickableOf(node);
+    if (!action || !identityOf(action)) continue;
+    const title = titleOf(node);
+    if (!title || /^(?:返回|返回课程|课程首页|测验|章节测验|测试|作业|签到|考试)$/i.test(title)) continue;
+    const rect = action.getBoundingClientRect?.();
+    if (rect && (rect.width <= 0 || rect.height <= 0)) continue;
+    try { node.scrollIntoView?.({ block:'center', behavior:'auto' }); } catch {}
+    try { action.click(); return true; } catch {}
+  }
+  return false;
+})()
+""";
+        var documentVersionBeforeClick = _documentVersion;
+        var results = await ExecuteAcrossDocumentsAsync<bool>(script, x => x);
+        return results.Any(x => x) || _documentVersion != documentVersionBeforeClick;
+    }
+
     public async Task<bool> OpenChapterAsync(ChapterItem chapter)
     {
         var targetId = JsonSerializer.Serialize(chapter.ChapterId ?? string.Empty);
