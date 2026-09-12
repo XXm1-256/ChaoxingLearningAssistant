@@ -11,7 +11,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>ChaoxingLearningAssistant</AssemblyName>
     <RootNamespace>ChaoxingLearningAssistant</RootNamespace>
-    <Version>1.43.0</Version>
+    <Version>1.44.0</Version>
     <Authors>OpenAI</Authors>
     <Description>学习通课程视频播放辅助工具</Description>
     <NoWarn>$(NoWarn);WFAC010</NoWarn>

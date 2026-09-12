@@ -127,15 +127,15 @@ if app_xaml.exists():
         if count != 1:
             errors.append(f"UI-REV regression: expected exactly one implicit {target} style, found {count}")
 
-launcher = ROOT / "BUILD_V1_43.bat"
+launcher = ROOT / "BUILD_V1_44.bat"
 if not launcher.exists():
-    errors.append("Missing BUILD_V1_43.bat")
+    errors.append("Missing BUILD_V1_44.bat")
 else:
     raw = launcher.read_bytes()
     if raw.startswith(b"\xef\xbb\xbf") or any(ch >= 128 for ch in raw):
-        errors.append("BUILD_V1_43.bat must remain ASCII/no-BOM")
-    if b"Build v1.43" not in raw:
-        errors.append("BUILD_V1_43.bat version banner mismatch")
+        errors.append("BUILD_V1_44.bat must remain ASCII/no-BOM")
+if b"Build v1.44" not in raw:
+        errors.append("BUILD_V1_44.bat version banner mismatch")
 
 
 # v1.10 real-runtime UI acceptance regression guards.
@@ -193,11 +193,11 @@ if main_xaml.exists():
             errors.append("ERR-RUNTIME-001 regression: ProgressPercent ProgressBar binding must be Mode=OneWay")
 
 
-launcher_v112 = ROOT / "BUILD_V1_43.bat"
+launcher_v112 = ROOT / "BUILD_V1_44.bat"
 if launcher_v112.exists():
     launcher_text_v112 = launcher_v112.read_text(encoding="ascii", errors="ignore")
-    if "Build Log v1.43" not in launcher_text_v112:
-        errors.append("VER-MGMT-002 regression: BUILD_LOG header must match v1.43")
+if "Build Log v1.44" not in launcher_text_v112:
+    errors.append("VER-MGMT-002 regression: BUILD_LOG header must match v1.44")
 
 # v1.13: inspect XML attribute values rather than stopping at StringFormat's nested braces.
 for path in ROOT.rglob("*.xaml"):
@@ -215,8 +215,8 @@ for path in ROOT.rglob("*.xaml"):
                 errors.append(f"ERR-RUNTIME-002: display-only {tag}.{name} requires OneWay: {path.relative_to(ROOT)}")
 
 project_xml = ET.parse(ROOT / "src/ChaoxingLearningAssistant/ChaoxingLearningAssistant.csproj")
-if project_xml.findtext(".//Version") != "1.43.0":
-    errors.append("Project version must be 1.43.0")
+if project_xml.findtext(".//Version") != "1.44.0":
+    errors.append("Project version must be 1.44.0")
 
 # v1.14: chapter catalog, continuous playback, and login-stability guards.
 chapter_model = ROOT / "src/ChaoxingLearningAssistant/Models/ChapterItem.cs"
@@ -273,7 +273,7 @@ page_result = ROOT / "src/ChaoxingLearningAssistant/Chaoxing/PageRecognitionResu
 course_model = ROOT / "src/ChaoxingLearningAssistant/Models/CourseItem.cs"
 for path, tokens in {
     adapter_cs: ("CompletionKnown", "FocusFirstUnfinishedVideoTaskAsync", "cleanTitle", "courseTitle", "x.id !== currentId"),
-    main_cs: ("ChapterList_PreviewMouseLeftButtonDown", "JumpToUnfinished_Click", "FindFirstUnfinishedNavigationCandidate", "IsStaleEndedPlayer", "ToggleCompactViewingMode", "UI-COMPACT-VIEW"),
+    main_cs: ("ChapterList_PreviewMouseLeftButtonDown", "FindFirstUnfinishedNavigationCandidate", "IsStaleEndedPlayer", "ToggleCompactViewingMode", "UI-COMPACT-VIEW"),
     chapter_model: ("CompletionKnown", "DisplayTitle", "IsActive"),
     course_model: ("ProgressSummary", "进入课程后同步视频进度"),
     page_result: ("CourseTitle",),
@@ -288,7 +288,7 @@ for path, tokens in {
 
 if main_xaml.exists():
     main_ui_v116 = main_xaml.read_text(encoding="utf-8-sig", errors="ignore")
-    for token in ('PreviewMouseLeftButtonDown="ChapterList_PreviewMouseLeftButtonDown"', 'Click="JumpToUnfinished_Click"', '全屏观看（F11）', 'ProgressSummary'):
+    for token in ('PreviewMouseLeftButtonDown="ChapterList_PreviewMouseLeftButtonDown"', '全屏观看（F11）', 'ProgressSummary'):
         if token not in main_ui_v116:
             errors.append(f"v1.16 UI regression: MainWindow missing {token}")
 
@@ -367,7 +367,6 @@ if main_xaml.exists():
         'PreviewMouseLeftButtonDown="ChapterList_PreviewMouseLeftButtonDown"',
         'Text="当前章节"',
         'Text="{Binding CurrentChapterText}"',
-        'Content="打开未完成章节"',
     ):
         if token not in ui_v118:
             errors.append(f"v1.18 UI regression: MainWindow missing {token}")
@@ -401,7 +400,7 @@ for path in visible_xaml:
 if main_xaml.exists():
     ui_v119 = main_xaml.read_text(encoding="utf-8-sig", errors="ignore")
     for token in (
-        'Title="学习通课程视频播放助手 v1.43"',
+        'Title="学习通课程视频播放助手 v1.44"',
         'Text="课程目录"',
         'Text="运行状态"',
         'Text="下一视频"',
@@ -815,12 +814,11 @@ for path, tokens in {
         if token not in source:
             errors.append(f"v1.35 regression: {path.name} missing {token}")
 
-# v1.36 recognizes lazy video iframes whose visible src is only index.html,
-# keeps assessment frames excluded, and gives unfinished-navigation clicks visible feedback.
+# v1.36 recognizes lazy video iframes whose visible src is only index.html and
+# keeps assessment frames excluded. The public unfinished button was removed in v1.44.
 for path, tokens in {
     adapter_cs: ("frameEvidence", "insertvideo", "attr(iframe,'_src')", "worktype"),
-    main_cs: ('JumpToUnfinishedButton.Content = "正在查找…"', "FindFirstPendingNavigationCandidate"),
-    main_xaml: ('x:Name="JumpToUnfinishedButton"',),
+    main_cs: ("FindFirstPendingNavigationCandidate",),
     adapter_regression: ("lazy learning-page iframe metadata identifies a video and excludes a chapter quiz",),
 }.items():
     source = path.read_text(encoding="utf-8-sig", errors="ignore")
@@ -834,7 +832,7 @@ model_tests = ROOT / "tests" / "ChaoxingLearningAssistant.Tests" / "ModelTests.c
 playback_plan = ROOT / "src" / "ChaoxingLearningAssistant" / "Services" / "CoursePlaybackPlan.cs"
 for path, tokens in {
     playback_plan: ("AllKnownVideosCompleted",),
-    main_cs: ("SkipChapterWithCompletedVideosAsync", "CX-COURSE-VIDEOS-COMPLETE", "await QueueAndOpenNextChapterAsync(chapter);"),
+    main_cs: ("SkipChapterWithCompletedVideosAsync", "CX-COURSE-VIDEOS-COMPLETE", "QueueAndOpenNextChapterAsync"),
     model_tests: ("CoursePlaybackPlan_AllKnownVideosCompleted_SeparatesQuizIncompleteChapterFromVideoWork",),
 }.items():
     source = path.read_text(encoding="utf-8-sig", errors="ignore")
@@ -848,7 +846,7 @@ url_classifier = ROOT / "src" / "ChaoxingLearningAssistant" / "Chaoxing" / "Chao
 for path, tokens in {
     url_classifier: ("MayContainChapterCatalogUri", "studentcourse", '"/visit/courses"'),
     main_xaml: ('PreviewMouseLeftButtonDown="CourseList_PreviewMouseLeftButtonDown"',),
-    main_cs: ("CourseList_PreviewMouseLeftButtonDown", "LibraryTabs.SelectedIndex = 1", "MayContainChapterCatalogUri", "章节目录未能加载"),
+    main_cs: ("CourseList_PreviewMouseLeftButtonDown", "LibraryTabs.SelectedIndex = 1", "MayContainChapterCatalogUri"),
 }.items():
     source = path.read_text(encoding="utf-8-sig", errors="ignore")
     for token in tokens:
@@ -873,7 +871,7 @@ for path, tokens in {
 # identical full-catalog observations.
 for path, tokens in {
     adapter_cs: ('BootstrapChapterCatalogAsync', '章节测验|测试|作业|签到|考试', 'documentVersionBeforeClick'),
-    main_cs: ('CatalogStatusFingerprint', 'stableScanCount >= 3', 'bootstrapWhenEmpty: true', 'CX-CATALOG-BOOTSTRAP'),
+    main_cs: ('CatalogStatusFingerprint', 'stableScanCount >= 3', 'CX-CATALOG-BOOTSTRAP'),
     ROOT / "scripts" / "adapter_regression.mjs": ('catalog bootstrap skips a quiz', 'catalog bootstrap does not click a generic course control'),
 }.items():
     source = path.read_text(encoding="utf-8-sig", errors="ignore")
@@ -927,6 +925,28 @@ for path, tokens in v143_checks.items():
     for token in tokens:
         if token not in source:
             errors.append(f"v1.43 regression: {path.name} missing {token}")
+
+# v1.44 starts from the video selected by the student. The removed shortcut must
+# not return, while natural same-chapter and cross-chapter continuation stays intact.
+if main_xaml.exists() and main_cs.exists():
+    ui_v144 = main_xaml.read_text(encoding="utf-8-sig", errors="ignore")
+    code_v144 = main_cs.read_text(encoding="utf-8-sig", errors="ignore")
+    for removed in ('x:Name="JumpToUnfinishedButton"', 'Content="打开未完成章节"', 'Click="JumpToUnfinished_Click"'):
+        if removed in ui_v144:
+            errors.append(f"v1.44 regression: removed unfinished shortcut returned: {removed}")
+    if "JumpToUnfinished_Click" in code_v144:
+        errors.append("v1.44 regression: removed unfinished shortcut handler returned")
+    start_v144 = re.search(r"private async void Start_Click[\s\S]*?\n\s*private async void PauseVideo_Click", code_v144)
+    if not start_v144 or '正在接管网页中手动打开的视频' not in start_v144.group(0):
+        errors.append("v1.44 regression: Start must operate the manually selected video")
+    elif any(token in start_v144.group(0) for token in (
+        "FindFirstUnfinishedNavigationCandidate", "FindFirstPendingNavigationCandidate",
+        "QueueAndOpenNextChapterAsync", "FocusFirstUnfinishedVideoTaskAsync"
+    )):
+        errors.append("v1.44 regression: Start must not search for an unfinished target")
+    for required in ("TryAdvanceWithinCurrentChapterAsync", "QueueAndOpenNextChapterAsync"):
+        if required not in code_v144:
+            errors.append(f"v1.44 regression: natural continuation missing {required}")
 
 
 if errors:

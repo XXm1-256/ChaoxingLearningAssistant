@@ -2583,7 +2583,7 @@ public partial class MainWindow : Window
             return;
         _playerCommandInProgress = true;
         BeginAutomationOperation();
-        ShowInAppNotice("开始辅助", "正在识别当前课程和待播放视频。", false);
+        ShowInAppNotice("开始辅助", "正在接管网页中手动打开的视频。", false);
         var pageVersion = _pageVersion;
 
         try
@@ -2595,46 +2595,9 @@ public partial class MainWindow : Window
             _autoAdvanceVisited.Clear();
             ResetCourseTraversal(null);
 
-            if (_vm.SelectedCourse is not null &&
-                !UriEquivalent(Browser.Source?.ToString(), _vm.SelectedCourse.Url) &&
-                !ChaoxingUrlClassifier.IsStudyUri(Browser.Source?.ToString()))
-            {
-                CurrentCourseText.Text = _vm.SelectedCourse.Title;
-                _startAfterNavigation = true;
-                Navigate(_vm.SelectedCourse.Url);
-                return;
-            }
-
-            if (ChaoxingUrlClassifier.IsStudyUri(Browser.Source?.ToString()))
-            {
-                var catalogResult = await RefreshCatalogUntilStatusReadyAsync(bootstrapWhenEmpty: true);
-                if (catalogResult != CatalogRefreshResult.Stable)
-                {
-                    if (catalogResult == CatalogRefreshResult.Unstable)
-                        NotifyUser("课程目录仍在加载", "章节状态仍在变化，程序不会提前选择目标。页面稳定后可再次点击开始。", false);
-                    return;
-                }
-                if (!IsCurrentPage(pageVersion)) return;
-                var preferred = FindFirstUnfinishedNavigationCandidate(_vm.Chapters);
-                if (preferred is not null && !ChapterMatchesUri(preferred, Browser.Source?.ToString()) && !IsConfirmedChapter(preferred))
-                {
-                    _autoAdvanceVisited.Clear();
-                    ResetCourseTraversal(preferred);
-                    await QueueAndOpenNextChapterAsync(preferred);
-                    return;
-                }
-                if (preferred is not null && (ChapterMatchesUri(preferred, Browser.Source?.ToString()) || IsConfirmedChapter(preferred)))
-                {
-                    await _adapter.FocusFirstUnfinishedVideoTaskAsync();
-                    await Task.Delay(200, _lifetimeCts.Token);
-                    if (!IsCurrentPage(pageVersion)) return;
-                }
-            }
-
             var snapshot = await _adapter.GetPlayerSnapshotAsync();
             if (!IsCurrentPage(pageVersion)) return;
-            var selectedIsCompleted = _vm.SelectedChapter?.CompletionKnown == true && _vm.SelectedChapter.IsCompleted;
-            if (snapshot.Found && !snapshot.Ended && !selectedIsCompleted)
+            if (snapshot.Found && !snapshot.Ended)
             {
                 ClearPendingNextVideo();
                 _autoAdvanceVisited.Clear();
@@ -2643,32 +2606,14 @@ public partial class MainWindow : Window
                 if (!IsCurrentPage(pageVersion)) return;
                 if (played)
                 {
-                    _stateMachine.Transition(AppRunState.Playing, "用户点击开始，播放当前未完成视频");
+                    _stateMachine.Transition(AppRunState.Playing, "用户点击开始，播放手动选择的视频");
                     return;
                 }
                 NotifyUser("请点击网页播放", "已找到视频，但浏览器尚未确认播放；请直接点击网页中的播放按钮。", false);
                 return;
             }
 
-            var first = FindFirstUnfinishedNavigationCandidate(_vm.Chapters);
-            if (first is not null)
-            {
-                _autoAdvanceVisited.Clear();
-                ResetCourseTraversal(first);
-                await QueueAndOpenNextChapterAsync(first);
-                return;
-            }
-
-            var pending = FindFirstPendingNavigationCandidate(_vm.Chapters);
-            if (pending is not null)
-            {
-                _autoAdvanceVisited.Clear();
-                ResetCourseTraversal(pending);
-                await QueueAndOpenNextChapterAsync(pending);
-                return;
-            }
-
-            NotifyUser("未找到未完成视频", "当前页面没有识别到明确的未完成章节 / 视频。可在网页目录中选择目标后继续使用。", false);
+            NotifyUser("请先选择视频", "请先在学习通网页中手动打开准备观看的视频，等播放器出现后再点击开始。", false);
         }
         catch (Exception ex)
         {
@@ -2904,52 +2849,6 @@ public partial class MainWindow : Window
         // PreviewMouseLeftButtonDown 阶段拦截 ListBox 默认选中，避免“左边先跳、播放器没变”。
         e.Handled = true;
         await OpenChapterFromLibraryAsync(chapter);
-    }
-
-    private async void JumpToUnfinished_Click(object sender, RoutedEventArgs e)
-    {
-        if (_adapter is null || _manualChapterOpenInProgress || _playerCommandInProgress ||
-            _pendingPreparationInProgress)
-            return;
-        JumpToUnfinishedButton.IsEnabled = false;
-        BeginAutomationOperation();
-        JumpToUnfinishedButton.Content = "正在查找…";
-        ShowInAppNotice("查找未完成视频", "正在刷新任务点和章节状态。", false);
-        try
-        {
-            var catalogResult = await RefreshCatalogUntilStatusReadyAsync(bootstrapWhenEmpty: true);
-            if (catalogResult != CatalogRefreshResult.Stable)
-            {
-                if (catalogResult == CatalogRefreshResult.Unstable)
-                    NotifyUser("课程目录仍在加载", "章节状态仍在变化，程序不会提前选择目标。页面稳定后可再次点击查找。", false);
-                return;
-            }
-            var chapter = FindFirstUnfinishedNavigationCandidate(_vm.Chapters) ??
-                          FindFirstPendingNavigationCandidate(_vm.Chapters);
-            if (chapter is null)
-            {
-                if (_vm.Chapters.Count == 0 &&
-                    ChaoxingUrlClassifier.MayContainChapterCatalogUri(Browser.Source?.ToString()))
-                {
-                    NotifyUser("章节目录未能加载", "程序已经尝试自动打开首个真实章节，但页面暂时没有提供可用的章节入口。可等待页面加载完成后再试。", false);
-                    return;
-                }
-                NotifyUser("没有可打开的视频", "当前目录没有识别到未完成或待核验的视频任务；可先在网页目录打开目标章节，再点击开始。", false);
-                return;
-            }
-            ShowInAppNotice("正在打开章节", $"正在进入“{chapter.DisplayTitle}”并寻找首个待播视频。", false);
-            ChapterList.ScrollIntoView(chapter);
-            // 按钮目标是寻找真正待播的视频，不是强制打开某个指定章节。
-            // 使用与自然结束相同的待播准备链，进入后可复核该章视频并继续向后跳过只剩测验的章节。
-            _autoAdvanceVisited.Clear();
-            ResetCourseTraversal(chapter);
-            await QueueAndOpenNextChapterAsync(chapter);
-        }
-        finally
-        {
-            JumpToUnfinishedButton.Content = "打开未完成章节";
-            JumpToUnfinishedButton.IsEnabled = true;
-        }
     }
 
     private async Task OpenChapterFromLibraryAsync(ChapterItem chapter)

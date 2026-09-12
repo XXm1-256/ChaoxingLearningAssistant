@@ -1,5 +1,5 @@
 param(
-    [string]$OutputPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'docs\validation\v1.43\app-main.png')
+    [string]$OutputPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'docs\validation\v1.44\app-main.png')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -19,7 +19,7 @@ public static class WindowCaptureNative {
 
 $process = Get-Process -Name 'ChaoxingLearningAssistant' -ErrorAction Stop |
     Where-Object { $_.MainWindowHandle -ne 0 } |
-    Sort-Object @{ Expression = { $_.MainWindowTitle -like '*v1.43*' }; Descending = $true },
+    Sort-Object @{ Expression = { $_.MainWindowTitle -like '*v1.44*' }; Descending = $true },
                 @{ Expression = { $_.StartTime }; Descending = $true } |
     Select-Object -First 1
 if (-not $process) { throw 'The application window is not open.' }

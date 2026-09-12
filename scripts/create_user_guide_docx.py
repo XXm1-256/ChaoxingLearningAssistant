@@ -11,7 +11,7 @@ from docx.shared import Inches, Pt, RGBColor
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "使用教学.docx"
-SCREENSHOT = ROOT / "docs" / "validation" / "v1.41" / "app-main.png"
+SCREENSHOT = ROOT / "docs" / "validation" / "v1.44" / "app-main.png"
 ACCENT = "3D9B67"
 PALE = "E8F5EC"
 DARK = "17392D"
@@ -141,16 +141,16 @@ remove_paragraph_border(title)
 set_font(title.add_run("学习通课程视频播放助手使用教学"), size=28, bold=True)
 subtitle = doc.add_paragraph()
 subtitle.paragraph_format.space_after = Pt(16)
-set_font(subtitle.add_run("适用于 v1.43 Windows 便携版"), size=11.5, color="4E6C5C")
+set_font(subtitle.add_run("适用于 v1.44 Windows 便携版"), size=11.5, color="4E6C5C")
 
-add_body(doc, "这份教学面向第一次使用的同学。程序帮助减少重复点击：识别课程中的真实视频，按同一章节内的视频顺序继续播放，再查找后续未完成视频。课程是否完成仍以学习通页面的实际记录为准。")
+add_body(doc, "这份教学面向第一次使用的同学。先在学习通网页中自行选择准备观看的视频，程序会从该视频开始，按课程中的真实视频顺序继续播放。课程是否完成仍以学习通页面的实际记录为准。")
 
 doc.add_heading("五步开始使用", level=1)
 add_steps(doc, [
     "完整解压下载包，不要直接在压缩包里运行程序。",
     "进入“学习通课程视频播放助手”文件夹，双击 ChaoxingLearningAssistant.exe。",
-    "完成登录并进入课程后，必须先在网页中手动点开任意一个视频。",
-    "视频页面出现后，再点“打开未完成章节”或顶部的“开始”。",
+    "完成登录并进入课程后，在网页中手动点开准备观看的视频。",
+    "视频页面出现后，再点顶部的“开始”。",
     "保持程序开启。视频自然结束后，程序会继续寻找下一段真实视频。",
 ])
 
@@ -169,9 +169,8 @@ if SCREENSHOT.exists():
 doc.add_page_break()
 doc.add_heading("主要按钮", level=1)
 buttons = [
-    ("开始", "识别当前课程和待播放视频，并尝试开始播放。"),
+    ("开始", "接管当前手动打开的视频，并尝试开始播放。"),
     ("课程列表", "单击课程即可进入；进入后还需要先在网页中手动点开任意一个视频。"),
-    ("打开未完成章节", "使用前必须先手动点开任意一个视频；页面加载完成后再查找真实待播目标。"),
     ("暂停辅助", "保留当前页面，但暂时不再自动查找或切换下一视频。"),
     ("全屏观看", "按 F11 让学习通网页铺满窗口；点顶部“退出全屏”，或按 Esc、F11 返回。"),
     ("刷新网页", "重新载入当前学习通页面。"),
@@ -207,17 +206,17 @@ for index, (button, meaning) in enumerate(buttons):
 
 doc.add_heading("播放顺序", level=1)
 add_body(doc, "程序只把真实视频计入视频顺序，不会把章节测验、作业、考试、签到或普通资料当成下一视频。同一章节有多个视频时，优先播放同章下一段视频；同章视频全部结束后，才会继续查找后续未完成章节。")
-add_body(doc, "先手动点开任意一个视频后，程序会连续核对目录状态再选择目标；播放中会先显示待核验的下一章节，进入后再定位其中第一条真实未完成视频。")
-add_body(doc, "章节即使显示未完成，只要其中视频都已看完，也会继续向后寻找，不会停在只剩测验或作业的章节。按钮查找和自然结束后的顺序跳转遵守相同规则。")
+add_body(doc, "先手动点开准备观看的视频后，程序会从该位置继续；播放中会先显示待核验的下一章节，进入后再定位其中第一条真实视频。")
+add_body(doc, "章节即使显示未完成，只要其中视频都已看完，也会继续向后寻找，不会停在只剩测验或作业的章节。")
 add_body(doc, "如果程序知道本章还有下一段视频，但学习通没有真正切换成功，程序会停在当前章并给出提示，不会越过该视频或把本章当成已经检查完成。")
 doc.add_heading("遇到问题", level=1)
 add_steps(doc, [
     "左侧课程为空时，先进入学习通课程页并点“刷新课程”；页面仍在加载时程序会短暂重试。",
     "进入课程后，必须先在网页中手动点开任意一个视频，并等待视频页面出现。",
-    "再点一次“开始”或“打开未完成章节”，观察右侧的“当前视频”和“下一视频”。",
+    "再点一次“开始”，观察右侧的“当前视频”和“下一视频”。",
     "仍然无法继续时，打开“日志与反馈”查看记录。",
     "点“导出反馈包”，并说明课程页面、发生步骤和当时的视频位置。",
-    "v1.43 会自动遮盖常见令牌、签名和 Cookie；公开发送前仍请检查并删除不便公开的课程名称、学校名称等内容。",
+    "v1.44 会自动遮盖常见令牌、签名和 Cookie；公开发送前仍请检查并删除不便公开的课程名称、学校名称等内容。",
 ])
 
 doc.add_heading("使用边界和免责声明", level=1)
@@ -225,7 +224,7 @@ add_body(doc, "本程序只是网页播放辅助工具，不绕过学习通的�
 add_body(doc, "本作品与超星学习通官方不存在隶属、授权或合作关系。使用时请遵守学校、课程和平台规则。网页结构、网络状态和平台规则可能变化，程序不能保证学习通最终记录结果；重要课程请在学习通页面人工核对进度。")
 
 doc.core_properties.title = "学习通课程视频播放助手使用教学"
-doc.core_properties.subject = "学习通课程视频播放助手 v1.43 使用说明"
+doc.core_properties.subject = "学习通课程视频播放助手 v1.44 使用说明"
 doc.core_properties.author = "ChaoxingLearningAssistant"
 doc.save(OUTPUT)
 print(OUTPUT)
