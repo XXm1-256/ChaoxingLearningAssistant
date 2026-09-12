@@ -548,6 +548,36 @@ public sealed class ModelTests
     }
 
     [TestMethod]
+    public void LoadingPlayer_DoesNotInheritPreviousVideosEnd()
+    {
+        var now = DateTime.UtcNow;
+        foreach (var duration in new[] { 0.0, double.NaN })
+        {
+            var loading = new PlayerSnapshot
+            {
+                Found = true, Paused = true, Source = "", Duration = duration, CurrentTime = 0
+            };
+            Assert.IsFalse(PlaybackEndDetector.IsNaturalEnd(
+                loading, now, now.AddSeconds(-1), "previous.mp4", 99, 100, 1, TimeSpan.FromSeconds(1)));
+        }
+    }
+
+    [TestMethod]
+    public void PlaybackConfirmation_RequiresProgressOnSamePlayer()
+    {
+        var before = new PlayerSnapshot { Found = true, DocumentUrl = "https://example.test/player", DomIndex = 0, Source = "a.mp4", CurrentTime = 0 };
+        var after = new PlayerSnapshot { Found = true, DocumentUrl = before.DocumentUrl, DomIndex = 0, Source = "a.mp4", Paused = false, CurrentTime = 0 };
+        Assert.IsFalse(PlayerMediaEvidence.HasPlaybackProgress(before, after), "play() can unpause a buffering video without playback.");
+        after.CurrentTime = 0.5;
+        Assert.IsTrue(PlayerMediaEvidence.HasPlaybackProgress(before, after));
+        after.Source = "b.mp4";
+        Assert.IsFalse(PlayerMediaEvidence.HasPlaybackProgress(before, after), "A different video's time cannot confirm this target.");
+        after.Source = "a.mp4";
+        after.Paused = true;
+        Assert.IsFalse(PlayerMediaEvidence.HasPlaybackProgress(before, after));
+    }
+
+    [TestMethod]
     public void PlaybackEndDetector_CatchesHighRateResetWithoutTreatingNormalPauseAsEnded()
     {
         var now = DateTime.UtcNow;

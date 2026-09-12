@@ -18,6 +18,9 @@ public static class PlaybackEndDetector
         if (!snapshot.Found) return false;
         if (snapshot.Ended) return true;
         if (!snapshot.Paused) return false;
+        // 新播放器载入时常见 0/0，不能沿用上一视频接近结尾的记录。
+        if (!double.IsFinite(snapshot.Duration) || snapshot.Duration <= 2 ||
+            string.IsNullOrWhiteSpace(snapshot.Source)) return false;
 
         var recentWindow = TimeSpan.FromSeconds(Math.Max(4.0, pollInterval.TotalSeconds * 2.5 + 0.5));
         if (lastPlayingAt == DateTime.MinValue || now - lastPlayingAt > recentWindow)

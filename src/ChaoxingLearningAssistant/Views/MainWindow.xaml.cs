@@ -939,6 +939,7 @@ public partial class MainWindow : Window
                                  !PlayerMediaEvidence.IsSameMedia(previousPlayerSnapshot, snapshot));
             if (playerChanged)
             {
+                _lastObservedPlayingAt = DateTime.MinValue;
                 if (_activeStat is not null && previousPlayerSnapshot?.Found == true)
                     FinishActiveStat("切换视频", previousPlayerSnapshot);
                 var previous = _lastPlayerIdentity;
@@ -1231,8 +1232,11 @@ public partial class MainWindow : Window
         if (_adapter is null) return false;
         var pageVersion = _pageVersion;
         var expectedGeneration = operationGeneration ?? _automationGeneration;
+        _vm.PlaybackStatusText = "下一视频加载中，通常需要约半分钟";
+        UpdateCompositeStatus();
 
-        for (var attempt = 0; attempt < 30; attempt++)
+        var targetObserved = false;
+        for (var attempt = 0; attempt < 120; attempt++)
         {
             if (_isClosing || _automationPaused || !IsCurrentPage(pageVersion) ||
                 !IsAutomationOperationCurrent(expectedGeneration))
@@ -1245,9 +1249,11 @@ public partial class MainWindow : Window
             if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration))
                 return false;
 
-            if (retryTargetAction is not null && attempt is 5 or 14 or 23 &&
-                (!candidate.Found || candidate.Ended || IsSameMediaEvidence(endedSnapshot, candidate) ||
-                 !PlayerMediaEvidence.IsReadyForPlayback(candidate)))
+            if (candidate.Found && !candidate.Ended && !IsSameMediaEvidence(endedSnapshot, candidate))
+                targetObserved = true;
+
+            if (!targetObserved && retryTargetAction is not null && attempt is 5 or 14 or 23 &&
+                (!candidate.Found || candidate.Ended || IsSameMediaEvidence(endedSnapshot, candidate)))
             {
                 await retryTargetAction();
                 if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration))
@@ -1258,14 +1264,16 @@ public partial class MainWindow : Window
             if (!candidate.Found || candidate.Ended || IsSameMediaEvidence(endedSnapshot, candidate))
                 continue;
 
-            if (!PlayerMediaEvidence.IsReadyForPlayback(candidate))
-                continue;
-
             var playback = await StartPlaybackWithRetryAsync(candidate, sourceLabel);
             if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration))
                 return false;
             var playing = playback.Playing;
             candidate = playback.Snapshot;
+            if (!playing)
+            {
+                StopAfterUnconfirmedNextVideo("下一视频已打开，但尚未确认播放进度。请等待加载完成后点击开始。");
+                return false;
+            }
 
             _lastPlayerIdentity = PlayerIdentity(candidate);
             _vm.CurrentVideoText = !string.IsNullOrWhiteSpace(candidate.VideoTitle)
@@ -1296,7 +1304,7 @@ public partial class MainWindow : Window
             return true;
         }
 
-        App.Logger.Warn(logCode, $"{sourceLabel}动作已提交，但约 10 秒内学习通真实播放器没有变化；继续其他导航路径。 ");
+        App.Logger.Warn(logCode, $"{sourceLabel}动作已提交，但等待期间未确认目标播放器；停止本次切换。 ");
         return false;
     }
 
@@ -1390,15 +1398,11 @@ public partial class MainWindow : Window
         var expectedGeneration = _automationGeneration;
         var target = initial;
         var current = initial;
-        for (var attempt = 0; attempt < 4; attempt++)
+        for (var attempt = 0; attempt < 24; attempt++)
         {
             if (_isClosing || _automationPaused || !IsCurrentPage(pageVersion) ||
                 !IsAutomationOperationCurrent(expectedGeneration))
                 return (false, current);
-
-            if (current.Found && !current.Ended && !current.Paused &&
-                PlayerMediaEvidence.MatchesPlaybackTarget(target, current))
-                return (true, current);
 
             if (App.Settings.Current.PreservePlaybackRate &&
                 _lastObservedPlaybackRate > 0 &&
@@ -1408,26 +1412,27 @@ public partial class MainWindow : Window
                 if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration)) return (false, current);
             }
 
-            var submitted = await _adapter.PlayVideoAsync(target);
+            var before = current;
+            await _adapter.PlayVideoAsync(target);
             if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration)) return (false, current);
-            await Task.Delay(submitted ? 250 : 400, _lifetimeCts.Token);
+            await Task.Delay(500, _lifetimeCts.Token);
             if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration)) return (false, current);
 
             var verified = await _adapter.GetPlayerSnapshotAsync(target);
             if (verified.Found && PlayerMediaEvidence.MatchesPlaybackTarget(target, verified))
                 current = verified;
-            if (current.Found && !current.Ended && !current.Paused &&
-                PlayerMediaEvidence.MatchesPlaybackTarget(target, current))
+            if (verified.Found && PlayerMediaEvidence.MatchesPlaybackTarget(target, verified) &&
+                PlayerMediaEvidence.HasPlaybackProgress(before, verified))
             {
                 App.Logger.Info("CX-AUTO-PLAY", $"{sourceLabel}自动播放确认成功；attempt={attempt + 1}");
                 return (true, current);
             }
 
-            if (attempt < 3)
+            if (attempt < 23)
                 await Task.Delay(300, _lifetimeCts.Token);
         }
 
-        App.Logger.Warn("CX-AUTO-PLAY", $"{sourceLabel}已切换播放器，但 4 次播放确认均未成功。 ");
+        App.Logger.Warn("CX-AUTO-PLAY", $"{sourceLabel}已切换播放器，但等待约 40 秒仍未确认播放进度，保留当前目标。 ");
         return (false, current);
     }
 
@@ -1445,6 +1450,8 @@ public partial class MainWindow : Window
             : _lastEndedMediaIdentity;
         _pendingOriginPlayerSnapshot = _lastObservedPlayerSnapshot;
         _vm.NextVideoText = next.Title;
+        _vm.PlaybackStatusText = "下一章节加载中，通常需要约半分钟";
+        UpdateCompositeStatus();
         _vm.CanContinueNext = false;
         ContinueNextButton.Visibility = Visibility.Collapsed;
         _stateMachine.Transition(AppRunState.PreloadingNextVideo, $"请求切换下一章节：{next.Title}");
@@ -1568,14 +1575,33 @@ public partial class MainWindow : Window
             if (targetTasks.Any(x => !x.CompletionKnown || !x.IsCompleted) &&
                 await _adapter.FocusFirstUnfinishedVideoTaskAsync())
             {
-                await Task.Delay(250, _lifetimeCts.Token);
-                if (_isClosing || _automationPaused || _pendingNextVideo != pending) return;
-                var focused = await _adapter.GetPlayerSnapshotAsync();
-                if (PlayerMediaEvidence.IsReadyForPlayback(focused) && !IsStaleEndedPlayer(focused) &&
-                    await PlayerMatchesTargetChapterAsync(pending, focused, allowCatalogEvidence: true))
+                var task = targetTasks.First(x => !x.CompletionKnown || !x.IsCompleted);
+                var expected = new PlayerSnapshot
                 {
-                    player = focused;
+                    Found = true, DocumentUrl = task.DocumentUrl, DomIndex = task.DomIndex,
+                    MediaId = task.MediaId, Source = task.Source, TaskKey = task.TaskKey,
+                    ChapterId = task.ChapterId
+                };
+                PlayerSnapshot? focused = null;
+                for (var attempt = 0; attempt < 120; attempt++)
+                {
+                    if (_isClosing || _automationPaused || _pendingNextVideo != pending) return;
+                    var candidate = await _adapter.GetPlayerSnapshotAsync(expected);
+                    if (_isClosing || _automationPaused || _pendingNextVideo != pending) return;
+                    if (candidate.Found && !candidate.Ended &&
+                        PlayerMediaEvidence.MatchesPlaybackTarget(expected, candidate))
+                    {
+                        focused = candidate;
+                        break;
+                    }
+                    await Task.Delay(350, _lifetimeCts.Token);
                 }
+                if (focused is null)
+                {
+                    await HandlePendingVideoUnavailableAsync(pending, "目标视频仍在加载，保留当前章节");
+                    return;
+                }
+                player = focused;
             }
 
             ConfirmCurrentChapter(pending, player, updateVideoTitle: true);
@@ -1682,7 +1708,7 @@ public partial class MainWindow : Window
         if (_adapter is null) return null;
         var expectedGeneration = _automationGeneration;
 
-        for (var attempt = 0; attempt < 14; attempt++)
+        for (var attempt = 0; attempt < 120; attempt++)
         {
             if (_isClosing || _automationPaused || _pendingNextVideo != target ||
                 !IsAutomationOperationCurrent(expectedGeneration))
@@ -1690,7 +1716,7 @@ public partial class MainWindow : Window
 
             var player = await _adapter.GetPlayerSnapshotAsync();
             if (!IsAutomationOperationCurrent(expectedGeneration)) return null;
-            if (PlayerMediaEvidence.IsReadyForPlayback(player))
+            if (player.Found && !player.Ended)
             {
                 var changed = originSnapshot?.Found != true || !IsSameMediaEvidence(originSnapshot, player);
                 var refreshStructure = attempt is 0 or 4 or 8 or 12;
@@ -1719,7 +1745,7 @@ public partial class MainWindow : Window
 
         var snapshot = knownSnapshot ?? await WaitForPendingPlayerSwitchAsync(target, _pendingOriginPlayerSnapshot);
         if (_pendingNextVideo != target || _isClosing) return;
-        if (snapshot is null || !PlayerMediaEvidence.IsReadyForPlayback(snapshot) || IsStaleEndedPlayer(snapshot))
+        if (snapshot is null || !snapshot.Found || snapshot.Ended || IsStaleEndedPlayer(snapshot))
         {
             await HandlePendingVideoUnavailableAsync(target, "未确认播放器已经切到目标章节");
             return;
@@ -1771,6 +1797,8 @@ public partial class MainWindow : Window
         else
         {
             _courseUnresolvedChapters[ChapterIdentity(pending)] = reason;
+            ShowContinueNextFallback(pending, "视频尚未加载或播放成功，请等待页面稳定后点击开始", chapterAlreadyConfirmed: false);
+            return;
         }
 
         var adapter = _adapter;
