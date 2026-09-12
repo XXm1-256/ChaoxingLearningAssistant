@@ -52,7 +52,7 @@ public static class NextVideoPreviewResolver
 
             var needsChapterInspection = videos.Length == 0 &&
                 ((chapter.TaskType == TaskType.Video && (!chapter.CompletionKnown || !chapter.IsCompleted)) ||
-                 (chapter.TaskType == TaskType.Unknown && chapter.CompletionKnown && !chapter.IsCompleted));
+                 (chapter.TaskType == TaskType.Unknown && (!chapter.CompletionKnown || !chapter.IsCompleted)));
             if (needsChapterInspection)
                 return $"下一章节 · {chapter.DisplayTitle}（进入后定位未完成视频）";
         }

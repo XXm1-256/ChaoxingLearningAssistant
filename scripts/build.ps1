@@ -81,7 +81,7 @@ if (-not (Test-Path $QuickExe)) {
     throw 'QUICK_RUN_EXE_NOT_FOUND: quick-run publish completed but the EXE was not found.'
 }
 Set-Content -Path (Join-Path $Artifacts 'QUICK_RUN_READY.txt') -Value @(
-    'Version: 1.41.0',
+    'Version: 1.42.0',
     'Quick-run build is ready.',
     'Open: artifacts\quick-run\ChaoxingLearningAssistant.exe',
     'This build requires .NET 8 Desktop Runtime on the computer.'

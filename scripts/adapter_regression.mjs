@@ -22,6 +22,11 @@ function interpolatedScript(method, replacements = {}) {
   assert.ok(match, `Missing interpolated script ${method}`);
   let code = match[1];
   const values = {
+    '(hasTarget ? "true" : "false")': false,
+    targetSource: '',
+    targetMediaId: '',
+    targetDocumentUrl: '',
+    targetDomIndex: -1,
     targetNextMediaId: '',
     targetNextDocumentUrl: '',
     targetNextSource: '',
@@ -33,7 +38,8 @@ function interpolatedScript(method, replacements = {}) {
   return code;
 }
 function evaluate(method, nodes) {
-  return vm.runInNewContext(script(method), {
+  const code = method === 'PlayVideoAsync' ? interpolatedScript(method) : script(method);
+  return vm.runInNewContext(code, {
     document: { querySelectorAll: () => nodes },
     location: { href: 'https://example.test/course/' }, URL, URLSearchParams,
   }, { timeout: 1000 });
@@ -221,6 +227,37 @@ test('play request returns a number, never a Promise, and targets one video', ()
   const second = video({ play: () => { calls.push('second'); return Promise.resolve(); } });
   assert.equal(evaluate('PlayVideoAsync', [first, second]), 1);
   assert.deepEqual(calls, ['first']);
+});
+test('play request can target the newly selected player instead of a stale earlier frame', () => {
+  const calls = [];
+  const block = id => ({
+    getAttribute: key => key === 'data-objectid' ? id : '',
+  });
+  const stale = video({
+    currentSrc: 'old.mp4',
+    closest: () => block('old'),
+    getAttribute: () => '',
+    play: () => { calls.push('old'); return Promise.resolve(); },
+  });
+  const target = video({
+    currentSrc: 'next.mp4',
+    closest: () => block('next'),
+    getAttribute: () => '',
+    play: () => { calls.push('next'); return Promise.resolve(); },
+  });
+  const code = interpolatedScript('PlayVideoAsync', {
+    '(hasTarget ? "true" : "false")': true,
+    targetSource: 'next.mp4',
+    targetMediaId: 'next',
+    targetDocumentUrl: 'https://example.test/course/',
+    targetDomIndex: 1,
+  });
+  const result = vm.runInNewContext(code, {
+    document: { querySelectorAll: () => [stale, target] },
+    location: { href: 'https://example.test/course/' },
+  }, { timeout: 1000 });
+  assert.equal(result, 1);
+  assert.deepEqual(calls, ['next']);
 });
 test('rejected browser play requests do not escape as unhandled JS errors', async () => {
   const result = evaluate('PlayVideoAsync', [video({ play: () => Promise.reject(new Error('NotAllowedError')) })]);

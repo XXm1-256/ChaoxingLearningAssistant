@@ -937,23 +937,54 @@ public sealed class ChaoxingAdapter : IDisposable
         return counts.Sum() > 0;
     }
 
-    public async Task<bool> PlayVideoAsync()
+    public async Task<bool> PlayVideoAsync(PlayerSnapshot? target = null)
     {
         if (_disposed || _playRequestInProgress) return false;
         _playRequestInProgress = true;
         var documentVersion = _documentVersion;
         try
         {
+        var hasTarget = target?.Found == true;
+        var targetSource = JsonSerializer.Serialize(target?.Source ?? string.Empty);
+        var targetMediaId = JsonSerializer.Serialize(target?.MediaId ?? string.Empty);
+        var targetDocumentUrl = JsonSerializer.Serialize(target?.DocumentUrl ?? string.Empty);
+        var targetDomIndex = target?.DomIndex ?? -1;
         // ExecuteScriptAsync 返回 JSON，不把 Promise 当作 int 解析。
         // JS 只提交一次播放请求；C# 随后核对播放器实际状态再报告成功。
-        const string script = """
+        var script = $$"""
 (() => {
+  const hasTarget = {{(hasTarget ? "true" : "false")}};
+  const targetSource = {{targetSource}};
+  const targetMediaId = {{targetMediaId}};
+  const targetDocumentUrl = {{targetDocumentUrl}};
+  const targetDomIndex = {{targetDomIndex}};
+  const norm = s => (s || '').trim();
+  const attr = (el, name) => el?.getAttribute?.(name) || '';
   const videos = Array.from(document.querySelectorAll('video'));
+  const domOrder = videos.slice();
+  const sourceOf = v => norm(v?.currentSrc || v?.src || '');
+  const mediaIdOf = v => {
+    const block = v?.closest?.('.ans-video,.ans-attach-ct,.ans-job,.ans-videoquiz,.video-box,.videoBox,.video-container,.task-point,.taskPoint,[data-objectid],[data-object-id]') || v?.parentElement;
+    return [
+      attr(v,'data-objectid'), attr(v,'data-object-id'), attr(v,'data-id'), attr(v,'data-mid'),
+      attr(block,'data-objectid'), attr(block,'data-object-id'), attr(block,'data-id'), attr(block,'data-mid'),
+      attr(block,'data-attachment'), attr(block,'data-attach-id')
+    ].map(norm).find(Boolean) || '';
+  };
   videos.sort((a,b) => {
     const visible = v => { const r = v.getBoundingClientRect(); return r.width > 10 && r.height > 10 ? 1 : 0; };
     return visible(b) - visible(a);
   });
-  const v = videos[0];
+  const v = hasTarget
+    ? videos.find(candidate => {
+        const index = domOrder.indexOf(candidate);
+        if (targetSource && sourceOf(candidate) === norm(targetSource)) return true;
+        if (targetDocumentUrl && norm(location.href) !== norm(targetDocumentUrl)) return false;
+        if (targetMediaId && mediaIdOf(candidate) === norm(targetMediaId) &&
+            (targetDomIndex < 0 || index === targetDomIndex)) return true;
+        return targetDomIndex >= 0 && index === targetDomIndex && !!targetDocumentUrl;
+      })
+    : videos[0];
   if (!v) return 0;
   try {
     const request = v.play();
@@ -971,7 +1002,9 @@ public sealed class ChaoxingAdapter : IDisposable
             if (_disposed || documentVersion != _documentVersion) return false;
             var snapshot = await GetPlayerSnapshotAsync();
             if (_disposed || documentVersion != _documentVersion) return false;
-            if (snapshot.Found && !snapshot.Paused && !snapshot.Ended) return true;
+            if (snapshot.Found && !snapshot.Paused && !snapshot.Ended &&
+                (!hasTarget || target is null || PlayerMediaEvidence.IsSameMedia(target, snapshot)))
+                return true;
             await Task.Delay(150);
         }
         return false;

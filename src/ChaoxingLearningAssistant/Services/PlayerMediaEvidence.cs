@@ -5,6 +5,11 @@ namespace ChaoxingLearningAssistant.Services;
 /// <summary>只使用稳定媒体证据判断“还是不是同一条真实视频”，避免标题/时长延迟加载造成假切换。</summary>
 public static class PlayerMediaEvidence
 {
+    public static bool IsReadyForPlayback(PlayerSnapshot snapshot)
+        => snapshot.Found && !snapshot.Ended &&
+           (!snapshot.Paused || snapshot.Duration > 0 ||
+            (snapshot.ReadyState >= 1 && !string.IsNullOrWhiteSpace(snapshot.Source)));
+
     public static string StableIdentity(PlayerSnapshot snapshot)
     {
         if (!snapshot.Found) return string.Empty;

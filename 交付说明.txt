@@ -1,1 +1,1 @@
-当前版本为 ChaoxingLearningAssistant_v1.41。最终分为两份 ZIP：GitHub 用户版最外层先显示 DOCX、PDF 与 Markdown 使用教学、常见问题文档，程序位于次级文件夹，不含开发归档；开发者版包含完整源码、累计 MASTER、错误档案、测试报告与历版 Release。GitHub 开源仓库不包含日志、登录资料或旧版压缩包。
+当前版本为 ChaoxingLearningAssistant_v1.42。最终分为两份 ZIP：GitHub 用户版最外层先显示 DOCX、PDF 与 Markdown 使用教学、常见问题文档，程序位于次级文件夹，不含开发归档；开发者版包含完整源码、累计 MASTER、错误档案、测试报告与历版 Release。GitHub 开源仓库不包含日志、登录资料或旧版压缩包。

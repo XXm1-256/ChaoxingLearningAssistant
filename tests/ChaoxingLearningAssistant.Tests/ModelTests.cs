@@ -94,7 +94,7 @@ public sealed class ModelTests
 
         var result = CoursePlaybackPlan.BuildPendingChapters(chapters, 0, new HashSet<string>());
 
-        CollectionAssert.AreEqual(new[] { "pending" }, result.Select(x => x.ChapterId).ToArray());
+        CollectionAssert.AreEqual(new[] { "unknown", "pending" }, result.Select(x => x.ChapterId).ToArray());
     }
 
     [TestMethod]
@@ -109,7 +109,7 @@ public sealed class ModelTests
 
         var result = CoursePlaybackPlan.BuildPendingChapters(chapters, 0, new HashSet<string>());
 
-        CollectionAssert.AreEqual(new[] { "needs-inspection" }, result.Select(x => x.ChapterId).ToArray());
+        CollectionAssert.AreEqual(new[] { "unknown-state", "needs-inspection" }, result.Select(x => x.ChapterId).ToArray());
     }
 
     [TestMethod]
@@ -270,6 +270,31 @@ public sealed class ModelTests
     }
 
     [TestMethod]
+    public void NextVideoPreview_PreviewsUnknownNextChapterInsteadOfReportingNone()
+    {
+        var currentTask = new VideoTaskItem { Index = 1, TaskKey = "current", IsPlaying = true };
+        var current = new ChapterItem
+        {
+            Index = 0,
+            ChapterId = "current",
+            TaskType = TaskType.Video,
+            VideoTasks = new List<VideoTaskItem> { currentTask }
+        };
+        var next = new ChapterItem
+        {
+            Index = 1,
+            ChapterId = "next",
+            Title = "下一章",
+            TaskType = TaskType.Unknown,
+            CompletionKnown = false
+        };
+
+        var result = NextVideoPreviewResolver.Resolve(new[] { current, next }, current, currentTask);
+
+        Assert.AreEqual("下一章节 · 下一章（进入后定位未完成视频）", result);
+    }
+
+    [TestMethod]
     public void CoursePlaybackPlan_AllKnownVideosCompleted_SeparatesQuizIncompleteChapterFromVideoWork()
     {
         var completedVideos = new[]
@@ -344,6 +369,39 @@ public sealed class ModelTests
         Assert.AreEqual(PlayerMediaEvidence.StableIdentity(before), PlayerMediaEvidence.StableIdentity(metadataLoaded));
         Assert.IsTrue(PlayerMediaEvidence.IsSameMedia(before, metadataLoaded));
         Assert.IsFalse(PlayerMediaEvidence.IsSameMedia(metadataLoaded, next));
+    }
+
+    [TestMethod]
+    public void PlayerMediaEvidence_DoesNotTreatEmptyPausedPlayerAsReady()
+    {
+        var empty = new PlayerSnapshot
+        {
+            Found = true, Paused = true, Ended = false,
+            Duration = 0, ReadyState = 0, Source = string.Empty
+        };
+        var loaded = new PlayerSnapshot
+        {
+            Found = true, Paused = true, Ended = false,
+            Duration = 500, ReadyState = 1, Source = "next.mp4"
+        };
+
+        Assert.IsFalse(PlayerMediaEvidence.IsReadyForPlayback(empty));
+        Assert.IsTrue(PlayerMediaEvidence.IsReadyForPlayback(loaded));
+    }
+
+    [TestMethod]
+    public void UnknownChapterWithoutCompletionMetadataRemainsAvailableForInspection()
+    {
+        var chapter = new ChapterItem
+        {
+            Index = 1,
+            ChapterId = "next",
+            Title = "下一章节",
+            TaskType = TaskType.Unknown,
+            CompletionKnown = false
+        };
+
+        Assert.IsTrue(CoursePlaybackPlan.HasPendingVideo(chapter));
     }
 
     [TestMethod]
