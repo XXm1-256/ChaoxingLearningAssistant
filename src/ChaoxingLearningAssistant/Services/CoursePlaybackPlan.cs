@@ -21,8 +21,10 @@ public static class CoursePlaybackPlan
     {
         if (chapter.VideoTasks.Count > 0)
             return chapter.VideoTasks.Any(x => !x.CompletionKnown || !x.IsCompleted);
-        // “章节未完成”可能只表示测验、作业等任务尚未完成。
-        // 没有视频证据的未知章节不能作为自动播放目标。
+        // 目录可能只暴露“章节未完成”，具体视频要进入章节后才创建。
+        // 只放行平台明确未完成的未知章节供进入后核验；状态也未知时仍不盲跳。
+        if (chapter.TaskType == TaskType.Unknown)
+            return chapter.CompletionKnown && !chapter.IsCompleted;
         return chapter.TaskType == TaskType.Video &&
                (!chapter.CompletionKnown || !chapter.IsCompleted);
     }

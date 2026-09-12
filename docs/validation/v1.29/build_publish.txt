@@ -1,8 +1,0 @@
-Command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Full
-Result: BUILD_SUCCESS
-Build: PASS (0 warnings, 0 errors)
-MSTest: PASS (29/29)
-Quick-run: PASS
-Self-contained win-x64: PASS
-Portable ZIP: PASS
-Installer: SKIPPED

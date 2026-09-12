@@ -1,9 +1,0 @@
-Command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Full
-Result: BUILD_SUCCESS
-Restore: PASS
-Release Build: PASS (0 warnings, 0 errors)
-MSTest: PASS (29/29)
-Quick-run publish: PASS
-Self-contained win-x64 publish: PASS
-Portable ZIP: PASS
-Installer: SKIPPED (Inno Setup 6 not installed)

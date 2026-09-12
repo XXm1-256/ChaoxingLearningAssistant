@@ -1,4 +1,0 @@
-Node adapter regression: PASS
-Tests: 46
-Pass: 46
-Fail: 0

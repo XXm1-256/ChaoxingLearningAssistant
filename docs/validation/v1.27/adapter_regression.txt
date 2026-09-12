@@ -1,6 +1,0 @@
-Command: node --test scripts/adapter_regression.mjs
-Result: PASS
-Tests: 43
-Passed: 43
-Failed: 0
-New test: natural next-chapter fallback accepts unknown status after the current chapter

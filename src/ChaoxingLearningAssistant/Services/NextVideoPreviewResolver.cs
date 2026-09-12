@@ -50,9 +50,11 @@ public static class NextVideoPreviewResolver
             if (nextTask is not null)
                 return FormatTask(nextTask, videos);
 
-            if (videos.Length == 0 && chapter.TaskType == TaskType.Video &&
-                (!chapter.CompletionKnown || !chapter.IsCompleted))
-                return $"{chapter.DisplayTitle}（进入后读取视频名称）";
+            var needsChapterInspection = videos.Length == 0 &&
+                ((chapter.TaskType == TaskType.Video && (!chapter.CompletionKnown || !chapter.IsCompleted)) ||
+                 (chapter.TaskType == TaskType.Unknown && chapter.CompletionKnown && !chapter.IsCompleted));
+            if (needsChapterInspection)
+                return $"下一章节 · {chapter.DisplayTitle}（进入后定位未完成视频）";
         }
 
         return NoNextText;

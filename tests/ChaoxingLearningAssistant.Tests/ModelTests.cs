@@ -98,6 +98,21 @@ public sealed class ModelTests
     }
 
     [TestMethod]
+    public void CoursePlaybackPlan_InspectsExplicitlyUnfinishedUnknownChapter()
+    {
+        var chapters = new[]
+        {
+            new ChapterItem { Index = 0, ChapterId = "unknown-state", TaskType = TaskType.Unknown },
+            new ChapterItem { Index = 1, ChapterId = "needs-inspection", TaskType = TaskType.Unknown, CompletionKnown = true, IsCompleted = false },
+            new ChapterItem { Index = 2, ChapterId = "done", TaskType = TaskType.Unknown, CompletionKnown = true, IsCompleted = true }
+        };
+
+        var result = CoursePlaybackPlan.BuildPendingChapters(chapters, 0, new HashSet<string>());
+
+        CollectionAssert.AreEqual(new[] { "needs-inspection" }, result.Select(x => x.ChapterId).ToArray());
+    }
+
+    [TestMethod]
     public void CoursePlaybackPlan_RespectsStartAndVerifiedChapters()
     {
         var chapters = new[]
@@ -226,6 +241,32 @@ public sealed class ModelTests
         var result = NextVideoPreviewResolver.Resolve(new[] { current, quiz }, current, task);
 
         Assert.AreEqual(NextVideoPreviewResolver.NoNextText, result);
+    }
+
+    [TestMethod]
+    public void NextVideoPreview_PreviewsExplicitlyUnfinishedUnknownChapterForInspection()
+    {
+        var currentTask = new VideoTaskItem { Index = 0, TaskKey = "current", IsPlaying = true };
+        var current = new ChapterItem
+        {
+            Index = 0,
+            ChapterId = "current",
+            TaskType = TaskType.Video,
+            VideoTasks = new List<VideoTaskItem> { currentTask }
+        };
+        var next = new ChapterItem
+        {
+            Index = 1,
+            ChapterId = "next",
+            Title = "2.3 软件系统",
+            TaskType = TaskType.Unknown,
+            CompletionKnown = true,
+            IsCompleted = false
+        };
+
+        var result = NextVideoPreviewResolver.Resolve(new[] { current, next }, current, currentTask);
+
+        Assert.AreEqual("下一章节 · 2.3 软件系统（进入后定位未完成视频）", result);
     }
 
     [TestMethod]

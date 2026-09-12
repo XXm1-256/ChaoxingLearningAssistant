@@ -1,5 +1,0 @@
-Command: dotnet test ChaoxingLearningAssistant.sln -c Release
-Result: PASS
-Passed: 29
-Failed: 0
-Skipped: 0

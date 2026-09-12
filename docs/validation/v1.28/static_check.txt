@@ -1,2 +1,0 @@
-Command: python scripts/static_check.py
-Result: STATIC CHECK: PASS

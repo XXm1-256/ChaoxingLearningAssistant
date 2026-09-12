@@ -1,4 +1,0 @@
-Python static: PASS
-Node adapter: 42/42 PASS
-New C# regression cases: 8, NOT RUN
-Windows Build / MSTest / WebView2 / real course: NOT RUN

@@ -1,4 +1,0 @@
-Command: node --test scripts/adapter_regression.mjs
-Result: PASS
-Passed: 46
-Failed: 0

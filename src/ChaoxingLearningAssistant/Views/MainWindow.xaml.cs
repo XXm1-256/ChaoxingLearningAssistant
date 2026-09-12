@@ -1649,7 +1649,8 @@ public partial class MainWindow : Window
     {
         if (chapter.VideoTasks.Count > 0)
             return chapter.VideoTasks.Any(x => x.CompletionKnown && !x.IsCompleted);
-        return chapter.TaskType == TaskType.Video && chapter.CompletionKnown && !chapter.IsCompleted;
+        return (chapter.TaskType == TaskType.Video || chapter.TaskType == TaskType.Unknown) &&
+               chapter.CompletionKnown && !chapter.IsCompleted;
     }
 
     private static bool ChapterHasPendingVideo(ChapterItem chapter)
