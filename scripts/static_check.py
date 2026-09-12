@@ -127,15 +127,15 @@ if app_xaml.exists():
         if count != 1:
             errors.append(f"UI-REV regression: expected exactly one implicit {target} style, found {count}")
 
-launcher = ROOT / "BUILD_V1_36.bat"
+launcher = ROOT / "BUILD_V1_37.bat"
 if not launcher.exists():
-    errors.append("Missing BUILD_V1_36.bat")
+    errors.append("Missing BUILD_V1_37.bat")
 else:
     raw = launcher.read_bytes()
     if raw.startswith(b"\xef\xbb\xbf") or any(ch >= 128 for ch in raw):
-        errors.append("BUILD_V1_36.bat must remain ASCII/no-BOM")
-    if b"Build v1.36" not in raw:
-        errors.append("BUILD_V1_36.bat version banner mismatch")
+        errors.append("BUILD_V1_37.bat must remain ASCII/no-BOM")
+    if b"Build v1.37" not in raw:
+        errors.append("BUILD_V1_37.bat version banner mismatch")
 
 
 # v1.10 real-runtime UI acceptance regression guards.
@@ -193,11 +193,11 @@ if main_xaml.exists():
             errors.append("ERR-RUNTIME-001 regression: ProgressPercent ProgressBar binding must be Mode=OneWay")
 
 
-launcher_v112 = ROOT / "BUILD_V1_36.bat"
+launcher_v112 = ROOT / "BUILD_V1_37.bat"
 if launcher_v112.exists():
     launcher_text_v112 = launcher_v112.read_text(encoding="ascii", errors="ignore")
-    if "Build Log v1.36" not in launcher_text_v112:
-        errors.append("VER-MGMT-002 regression: BUILD_LOG header must match v1.36")
+    if "Build Log v1.37" not in launcher_text_v112:
+        errors.append("VER-MGMT-002 regression: BUILD_LOG header must match v1.37")
 
 # v1.13: inspect XML attribute values rather than stopping at StringFormat's nested braces.
 for path in ROOT.rglob("*.xaml"):
@@ -215,8 +215,8 @@ for path in ROOT.rglob("*.xaml"):
                 errors.append(f"ERR-RUNTIME-002: display-only {tag}.{name} requires OneWay: {path.relative_to(ROOT)}")
 
 project_xml = ET.parse(ROOT / "src/ChaoxingLearningAssistant/ChaoxingLearningAssistant.csproj")
-if project_xml.findtext(".//Version") != "1.36.0":
-    errors.append("Project version must be 1.36.0")
+if project_xml.findtext(".//Version") != "1.37.0":
+    errors.append("Project version must be 1.37.0")
 
 # v1.14: chapter catalog, continuous playback, and login-stability guards.
 chapter_model = ROOT / "src/ChaoxingLearningAssistant/Models/ChapterItem.cs"
@@ -401,7 +401,7 @@ for path in visible_xaml:
 if main_xaml.exists():
     ui_v119 = main_xaml.read_text(encoding="utf-8-sig", errors="ignore")
     for token in (
-        'Title="学习通课程视频播放助手 v1.36"',
+        'Title="学习通课程视频播放助手 v1.37"',
         'Text="课程目录"',
         'Text="运行状态"',
         'Text="下一视频"',
@@ -827,6 +827,20 @@ for path, tokens in {
     for token in tokens:
         if token not in source:
             errors.append(f"v1.36 regression: {path.name} missing {token}")
+
+# v1.37 re-checks real videos after entering a chapter. A chapter left incomplete by
+# a quiz must be skipped by both manual unfinished navigation and automatic traversal.
+model_tests = ROOT / "tests" / "ChaoxingLearningAssistant.Tests" / "ModelTests.cs"
+playback_plan = ROOT / "src" / "ChaoxingLearningAssistant" / "Services" / "CoursePlaybackPlan.cs"
+for path, tokens in {
+    playback_plan: ("AllKnownVideosCompleted",),
+    main_cs: ("SkipChapterWithCompletedVideosAsync", "CX-COURSE-VIDEOS-COMPLETE", "await QueueAndOpenNextChapterAsync(chapter);"),
+    model_tests: ("CoursePlaybackPlan_AllKnownVideosCompleted_SeparatesQuizIncompleteChapterFromVideoWork",),
+}.items():
+    source = path.read_text(encoding="utf-8-sig", errors="ignore")
+    for token in tokens:
+        if token not in source:
+            errors.append(f"v1.37 regression: {path.name} missing {token}")
 
 
 if errors:

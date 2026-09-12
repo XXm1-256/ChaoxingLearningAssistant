@@ -226,6 +226,25 @@ public sealed class ModelTests
     }
 
     [TestMethod]
+    public void CoursePlaybackPlan_AllKnownVideosCompleted_SeparatesQuizIncompleteChapterFromVideoWork()
+    {
+        var completedVideos = new[]
+        {
+            new VideoTaskItem { CompletionKnown = true, IsCompleted = true },
+            new VideoTaskItem { CompletionKnown = true, IsCompleted = true }
+        };
+        var stillPending = new[]
+        {
+            new VideoTaskItem { CompletionKnown = true, IsCompleted = true },
+            new VideoTaskItem { CompletionKnown = true, IsCompleted = false }
+        };
+
+        Assert.IsTrue(CoursePlaybackPlan.AllKnownVideosCompleted(completedVideos));
+        Assert.IsFalse(CoursePlaybackPlan.AllKnownVideosCompleted(stillPending));
+        Assert.IsFalse(CoursePlaybackPlan.AllKnownVideosCompleted(Array.Empty<VideoTaskItem>()));
+    }
+
+    [TestMethod]
     public void VideoTaskEvidence_MergesParentChapterAndCompletionIntoIframeVideo()
     {
         var parent = new VideoTaskItem

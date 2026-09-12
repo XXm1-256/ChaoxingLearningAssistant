@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$OutputDirectory = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 )
 
@@ -8,7 +8,7 @@ $Publish = Join-Path $Root 'artifacts\publish\win-x64'
 $Stage = Join-Path $Root ('artifacts\github-release-' + [Guid]::NewGuid().ToString('N'))
 $ProgramFolderName = -join @(0x5B66,0x4E60,0x901A,0x8BFE,0x7A0B,0x89C6,0x9891,0x64AD,0x653E,0x52A9,0x624B | ForEach-Object { [char]$_ })
 $Program = Join-Path $Stage $ProgramFolderName
-$Destination = Join-Path $OutputDirectory 'ChaoxingLearningAssistant_v1.36_Windows.zip'
+$Destination = Join-Path $OutputDirectory 'ChaoxingLearningAssistant_v1.37_Windows.zip'
 $TutorialMarkdown = Join-Path $Root '使用教学.md'
 $TutorialDocx = Join-Path $Root '使用教学.docx'
 $TutorialPdf = Join-Path $Root '使用教学.pdf'

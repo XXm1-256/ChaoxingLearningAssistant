@@ -27,6 +27,12 @@ public static class CoursePlaybackPlan
                (!chapter.CompletionKnown || !chapter.IsCompleted);
     }
 
+    public static bool AllKnownVideosCompleted(IEnumerable<VideoTaskItem> tasks)
+    {
+        var videos = tasks.ToArray();
+        return videos.Length > 0 && videos.All(x => x.CompletionKnown && x.IsCompleted);
+    }
+
     public static string Identity(ChapterItem chapter)
     {
         if (!string.IsNullOrWhiteSpace(chapter.ChapterId))

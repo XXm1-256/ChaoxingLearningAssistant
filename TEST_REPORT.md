@@ -1,4 +1,18 @@
-# TEST_REPORT - 当前版本 v1.36
+# TEST_REPORT - 当前版本 v1.37
+
+## v1.37 章节视频完成后二次核验 2026 09 12
+
+- 单元测试：37/37 通过；新增“两条视频均完成、章节仍因测验未完成”的分离判断用例。
+- Adapter JavaScript：52/52 通过；懒加载视频识别与章节测验排除保持通过。
+- 代码路径检查：按钮跳转和自然结束顺序跳转均进入 `PreparePendingVideoAfterNavigationAsync`；章节打开后统一调用任务级扫描，视频全部完成则继续后续候选。
+- 静态检查：通过；覆盖 v1.37 版本标识、进章后二次核验、按钮共用待播准备链及新增测试。
+- 完整构建：Restore、Release Build、MSTest、quick-run、self-contained win-x64 publish 全部通过；0 警告、0 错误。本机未安装 Inno Setup，因此安装器按既定规则跳过。
+- 使用教学 DOCX/PDF：通过；使用 v1.37 本机界面截图并逐页检查 4 页，无裁切、重叠、乱码或缺字。
+- 用户版 ZIP：通过；顶层仅 DOCX、PDF、Markdown 教学与程序次级文件夹，解压后隐藏启动 6 秒保持运行。
+- 开发者版 ZIP：通过；顶层为单一 `ChaoxingLearningAssistant_v1.37` 目录，包含源码、累计档案和 MASTER。
+- MASTER：UTF-8 BOM 存在，无替换字符；内嵌载荷可恢复 153 个清单文件，逐文件哈希差异 0。
+- GitHub 同步结果将在完成后补记。
+- 真实学习通账号页面：尚待用成品验证；自动测试不冒充平台实测。
 
 ## v1.36 懒加载视频与未完成章节操作回归 2026 09 11
 
