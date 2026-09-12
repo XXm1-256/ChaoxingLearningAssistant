@@ -10,6 +10,54 @@ public static class PlayerMediaEvidence
            (!snapshot.Paused || snapshot.Duration > 0 ||
             (snapshot.ReadyState >= 1 && !string.IsNullOrWhiteSpace(snapshot.Source)));
 
+    /// <summary>
+    /// 判断播放器快照是否仍属于一次播放请求最初锁定的 DOM 目标。
+    /// 目标刚创建时可以没有媒体地址；已经存在的证据一旦冲突则绝不漂移到其他播放器。
+    /// </summary>
+    public static bool MatchesPlaybackTarget(PlayerSnapshot target, PlayerSnapshot candidate)
+    {
+        if (!target.Found || !candidate.Found)
+            return false;
+
+        var matched = false;
+        var targetDocument = Normalize(target.DocumentUrl);
+        var candidateDocument = Normalize(candidate.DocumentUrl);
+        if (!string.IsNullOrWhiteSpace(targetDocument))
+        {
+            if (!string.Equals(targetDocument, candidateDocument, StringComparison.OrdinalIgnoreCase))
+                return false;
+            matched = true;
+        }
+
+        if (target.DomIndex >= 0)
+        {
+            if (candidate.DomIndex != target.DomIndex)
+                return false;
+            matched = true;
+        }
+
+        var targetMediaId = Normalize(target.MediaId);
+        var candidateMediaId = Normalize(candidate.MediaId);
+        if (!string.IsNullOrWhiteSpace(targetMediaId) && !string.IsNullOrWhiteSpace(candidateMediaId))
+        {
+            if (!string.Equals(targetMediaId, candidateMediaId, StringComparison.OrdinalIgnoreCase))
+                return false;
+            matched = true;
+        }
+
+        var targetSource = Normalize(target.Source);
+        var candidateSource = Normalize(candidate.Source);
+        if (!string.IsNullOrWhiteSpace(targetSource) && !string.IsNullOrWhiteSpace(candidateSource))
+        {
+            if (!string.Equals(targetSource, candidateSource, StringComparison.OrdinalIgnoreCase) &&
+                !SameSourcePath(targetSource, candidateSource))
+                return false;
+            matched = true;
+        }
+
+        return matched;
+    }
+
     public static string StableIdentity(PlayerSnapshot snapshot)
     {
         if (!snapshot.Found) return string.Empty;
@@ -60,7 +108,15 @@ public static class PlayerMediaEvidence
                 return false;
             if (!string.IsNullOrWhiteSpace(a.TaskKey) && !string.IsNullOrWhiteSpace(b.TaskKey) &&
                 !string.Equals(a.TaskKey, b.TaskKey, StringComparison.OrdinalIgnoreCase))
-                return false;
+            {
+                var generatedKeysChangedOnlyWithSource = LooksSourceDerivedTaskKey(a.TaskKey) &&
+                    LooksSourceDerivedTaskKey(b.TaskKey) && SameSourcePath(a.Source, b.Source) &&
+                    a.DomIndex == b.DomIndex &&
+                    string.Equals(Normalize(a.DocumentUrl), Normalize(b.DocumentUrl), StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(Normalize(a.MediaId), Normalize(b.MediaId), StringComparison.OrdinalIgnoreCase);
+                if (!generatedKeysChangedOnlyWithSource)
+                    return false;
+            }
             return true;
         }
 
@@ -81,8 +137,9 @@ public static class PlayerMediaEvidence
 
     private static bool SameStrongTaskEvidence(PlayerSnapshot a, PlayerSnapshot b)
     {
-        if (!string.IsNullOrWhiteSpace(a.TaskKey) && !string.IsNullOrWhiteSpace(b.TaskKey))
-            return string.Equals(a.TaskKey, b.TaskKey, StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(a.TaskKey) && !string.IsNullOrWhiteSpace(b.TaskKey) &&
+            string.Equals(a.TaskKey, b.TaskKey, StringComparison.OrdinalIgnoreCase))
+            return true;
 
         return !string.IsNullOrWhiteSpace(a.MediaId) &&
                !string.IsNullOrWhiteSpace(b.MediaId) &&
@@ -103,6 +160,9 @@ public static class PlayerMediaEvidence
                aUri.Port == bUri.Port &&
                string.Equals(aUri.AbsolutePath, bUri.AbsolutePath, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool LooksSourceDerivedTaskKey(string? value)
+        => !string.IsNullOrWhiteSpace(value) && value.Contains("|src:", StringComparison.OrdinalIgnoreCase);
 
     private static string Normalize(string? value) => (value ?? string.Empty).Trim();
 }

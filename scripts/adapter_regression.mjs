@@ -38,7 +38,9 @@ function interpolatedScript(method, replacements = {}) {
   return code;
 }
 function evaluate(method, nodes) {
-  const code = method === 'PlayVideoAsync' ? interpolatedScript(method) : script(method);
+  const code = ['PlayVideoAsync', 'GetPlayerSnapshotAsync'].includes(method)
+    ? interpolatedScript(method)
+    : script(method);
   return vm.runInNewContext(code, {
     document: { querySelectorAll: () => nodes },
     location: { href: 'https://example.test/course/' }, URL, URLSearchParams,
@@ -221,6 +223,30 @@ test('player snapshot exposes stable media and document evidence for UI synchron
   assert.equal(result.documentUrl, 'https://example.test/course/');
   assert.equal(result.videoTitle, '真实视频标题');
 });
+test('targeted snapshot does not drift to an older playing player with the same source', () => {
+  const block = { getAttribute: key => key === 'data-objectid' ? 'shared' : '', querySelector: () => null };
+  const stale = video({
+    paused: false, currentSrc: 'https://cdn.example/shared.mp4?token=old',
+    closest: () => block, getAttribute: () => '',
+  });
+  const target = video({
+    paused: true, currentSrc: 'https://cdn.example/shared.mp4?token=new',
+    closest: () => block, getAttribute: () => '',
+  });
+  const code = interpolatedScript('GetPlayerSnapshotAsync', {
+    '(hasTarget ? "true" : "false")': true,
+    targetSource: 'https://cdn.example/shared.mp4?token=new',
+    targetMediaId: 'shared',
+    targetDocumentUrl: 'https://example.test/course/',
+    targetDomIndex: 1,
+  });
+  const result = vm.runInNewContext(code, {
+    document: { querySelectorAll: () => [stale, target], querySelector: () => null },
+    location: { href: 'https://example.test/course/' }, URL,
+  }, { timeout: 1000 });
+  assert.equal(result.domIndex, 1);
+  assert.equal(result.paused, true);
+});
 test('play request returns a number, never a Promise, and targets one video', () => {
   const calls = [];
   const first = video({ play: () => { calls.push('first'); return Promise.resolve(); } });
@@ -258,6 +284,31 @@ test('play request can target the newly selected player instead of a stale earli
   }, { timeout: 1000 });
   assert.equal(result, 1);
   assert.deepEqual(calls, ['next']);
+});
+test('target dom position prevents an older player with the same source from receiving play', () => {
+  const calls = [];
+  const block = { getAttribute: key => key === 'data-objectid' ? 'shared' : '' };
+  const stale = video({
+    currentSrc: 'https://cdn.example/shared.mp4?token=old', closest: () => block, getAttribute: () => '',
+    play: () => { calls.push('stale'); return Promise.resolve(); },
+  });
+  const target = video({
+    currentSrc: 'https://cdn.example/shared.mp4?token=new', closest: () => block, getAttribute: () => '',
+    play: () => { calls.push('target'); return Promise.resolve(); },
+  });
+  const code = interpolatedScript('PlayVideoAsync', {
+    '(hasTarget ? "true" : "false")': true,
+    targetSource: 'https://cdn.example/shared.mp4?token=new',
+    targetMediaId: 'shared',
+    targetDocumentUrl: 'https://example.test/course/',
+    targetDomIndex: 1,
+  });
+  const result = vm.runInNewContext(code, {
+    document: { querySelectorAll: () => [stale, target] },
+    location: { href: 'https://example.test/course/' }, URL,
+  }, { timeout: 1000 });
+  assert.equal(result, 1);
+  assert.deepEqual(calls, ['target']);
 });
 test('rejected browser play requests do not escape as unhandled JS errors', async () => {
   const result = evaluate('PlayVideoAsync', [video({ play: () => Promise.reject(new Error('NotAllowedError')) })]);
@@ -812,6 +863,42 @@ test('lazy learning-page iframe metadata identifies a video and excludes a chapt
   const focused = vm.runInNewContext(script('FocusFirstUnfinishedVideoTaskAsync'), context, { timeout: 1000 });
   assert.equal(focused, true);
   assert.deepEqual(clicks, ['video']);
+});
+
+test('loaded videos reserve the shared parent-block position of a lazy task between them', () => {
+  const attrs = values => key => values[key] || '';
+  const frame = {
+    src: 'https://player.example/video/b', className: 'ans-insertvideo-online',
+    getAttribute: attrs({ src: 'https://player.example/video/b', class: 'ans-insertvideo-online', 'data-objectid': 'b' }),
+  };
+  let videoA, videoC;
+  const makeBlock = (id, lazy = false) => ({
+    innerText: `视频 ${id}`, textContent: `视频 ${id}`, outerHTML: `<div class="ans-video">${id}</div>`,
+    className: 'ans-video', getAttribute: attrs({ 'data-objectid': id, title: `视频 ${id}` }),
+    querySelector: selector => lazy
+      ? (selector === 'iframe' || selector === 'iframe[src]' ? frame : null)
+      : (selector.includes('video') ? (id === 'a' ? videoA : videoC) : null),
+    getBoundingClientRect: () => ({ width: 640, height: 360 }),
+  });
+  const blockA = makeBlock('a');
+  const blockB = makeBlock('b', true);
+  const blockC = makeBlock('c');
+  const makeVideo = (id, block) => video({
+    currentSrc: `https://cdn.example/${id}.mp4`,
+    closest: () => block, getAttribute: attrs({ 'data-objectid': id }), parentElement: block,
+  });
+  videoA = makeVideo('a', blockA);
+  videoC = makeVideo('c', blockC);
+  const scanned = vm.runInNewContext(script('ScanVideoTasksAsync'), {
+    document: { querySelectorAll: selector => selector === 'video' ? [videoA, videoC] : [blockA, blockB, blockC] },
+    location: { href: 'https://example.test/course/?chapterId=one' }, URL,
+  }, { timeout: 1000 });
+
+  // The dedicated lazy-frame fixture above proves that B is discovered. This mixed fixture
+  // proves that loaded C no longer collapses into B's parent position before the merge stage.
+  const lastLoaded = scanned.find(x => x.mediaId === 'c');
+  assert.ok(lastLoaded, JSON.stringify(scanned));
+  assert.equal(lastLoaded.index, 2);
 });
 
 test('same-chapter sequential playback accepts an unknown-status next video without labeling it unfinished', () => {

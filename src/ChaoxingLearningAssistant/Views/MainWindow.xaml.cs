@@ -16,6 +16,20 @@ namespace ChaoxingLearningAssistant.Views;
 
 public partial class MainWindow : Window
 {
+    private enum AdvanceAttemptResult
+    {
+        NoCandidate,
+        Advanced,
+        Failed
+    }
+
+    private enum CatalogRefreshResult
+    {
+        Stable,
+        Navigated,
+        Unstable
+    }
+
     private readonly MainViewModel _vm = new();
     private readonly ThemeService _themeService = new();
     private readonly LearningStatsService _statsService;
@@ -35,6 +49,7 @@ public partial class MainWindow : Window
     private readonly NotificationThrottle _notificationThrottle = new();
     private ulong _navigationId;
     private int _pageVersion;
+    private long _automationGeneration;
     private bool _isNavigating;
     private bool _pollInProgress;
     private bool _playerCommandInProgress;
@@ -58,6 +73,7 @@ public partial class MainWindow : Window
     private LearningStatRecord? _activeStat;
     private DateTime _lastPlayerPoll = DateTime.MinValue;
     private DateTime _lastChapterRefreshAttempt = DateTime.MinValue;
+    private DateTime _lastManualInterventionCheckAt = DateTime.MinValue;
     private string _lastError = string.Empty;
     private PageRecognitionResult _lastRecognition = new();
     private string _lastStableStudyUrl = string.Empty;
@@ -428,8 +444,14 @@ public partial class MainWindow : Window
             if (_startAfterNavigation)
             {
                 _startAfterNavigation = false;
-                await RefreshCatalogUntilStatusReadyAsync();
+                var catalogResult = await RefreshCatalogUntilStatusReadyAsync();
                 if (!IsCurrentPage(pageVersion)) return;
+                if (catalogResult != CatalogRefreshResult.Stable)
+                {
+                    if (catalogResult == CatalogRefreshResult.Unstable)
+                        NotifyUser("课程目录仍在加载", "章节状态仍在变化，程序不会提前选择目标。页面稳定后可再次点击开始。", false);
+                    return;
+                }
                 var first = FindFirstUnfinishedNavigationCandidate(_vm.Chapters) ??
                             FindFirstPendingNavigationCandidate(_vm.Chapters);
 
@@ -771,7 +793,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task<bool> RefreshCatalogUntilStatusReadyAsync(
+    private async Task<CatalogRefreshResult> RefreshCatalogUntilStatusReadyAsync(
         PlayerSnapshot? playerEvidence = null,
         bool preserveSelection = true,
         bool bootstrapWhenEmpty = false)
@@ -786,7 +808,7 @@ public partial class MainWindow : Window
         {
             await RefreshChaptersInternalAsync(silent: true, playerEvidence: playerEvidence, preserveSelection: preserveSelection);
             if (_isClosing || _isNavigating)
-                return _isNavigating;
+                return _isNavigating ? CatalogRefreshResult.Navigated : CatalogRefreshResult.Unstable;
 
             if (_vm.Chapters.Count == 0 && bootstrapWhenEmpty && !bootstrapAttempted && _adapter is not null)
             {
@@ -801,7 +823,7 @@ public partial class MainWindow : Window
                 {
                     await Task.Delay(800, _lifetimeCts.Token);
                     if (_isNavigating || !IsCurrentPage(pageVersionBeforeBootstrap))
-                        return true;
+                        return CatalogRefreshResult.Navigated;
                 }
                 _startAfterNavigation = false;
                 previousFingerprint = null;
@@ -819,12 +841,13 @@ public partial class MainWindow : Window
             }
 
             if (stableScanCount >= 3)
-                return false;
+                return CatalogRefreshResult.Stable;
 
             await Task.Delay(TimeSpan.FromMilliseconds(550 + attempt * 150), _lifetimeCts.Token);
         }
 
-        return false;
+        App.Logger.Warn("CX-CATALOG-UNSTABLE", "章节目录在限定等待时间内仍持续变化，本轮不确认完成也不自动选择目标。");
+        return CatalogRefreshResult.Unstable;
     }
 
     private string CatalogStatusFingerprint()
@@ -851,6 +874,26 @@ public partial class MainWindow : Window
 
         try
         {
+            if (DateTime.Now - _lastManualInterventionCheckAt >= TimeSpan.FromSeconds(2))
+            {
+                _lastManualInterventionCheckAt = DateTime.Now;
+                var recognition = await _adapter.RecognizePageAsync();
+                if (!IsCurrentPage(pageVersion)) return;
+                _lastRecognition = recognition;
+                if (recognition.HasManualIntervention)
+                {
+                    await _adapter.PauseVideoAsync();
+                    if (!IsCurrentPage(pageVersion)) return;
+                    SetAutomationPaused(true);
+                    _stateMachine.Transition(AppRunState.ManualIntervention,
+                        $"播放期间检测到需要人工处理：{recognition.ManualInterventionReason}");
+                    NotifyUser("需要人工处理",
+                        $"页面出现“{recognition.ManualInterventionReason}”，辅助流程已暂停。处理完成后可重新开启。",
+                        true);
+                    return;
+                }
+            }
+
             if (_vm.Chapters.Count == 0 &&
                 ChaoxingUrlClassifier.MayContainChapterCatalogUri(Browser.Source?.ToString()) &&
                 DateTime.Now - _lastChapterRefreshAttempt >= TimeSpan.FromSeconds(8))
@@ -1027,6 +1070,7 @@ public partial class MainWindow : Window
 
         _handlingEnded = true;
         var pageVersion = _pageVersion;
+        var operationGeneration = BeginAutomationOperation();
         try
         {
             if (snapshot.PlaybackRate > 0)
@@ -1040,13 +1084,31 @@ public partial class MainWindow : Window
 
             // 必须先按当前章节内部的任务顺序寻找下一条真实视频。
             // 测验、作业、签到和考试都不参与候选，章节内视频没有播完时绝不提前切章。
-            if (App.Settings.Current.AutoPlayNextVideo && await TryAdvanceWithinCurrentChapterAsync(snapshot))
-                return;
+            if (App.Settings.Current.AutoPlayNextVideo)
+            {
+                var withinChapter = await TryAdvanceWithinCurrentChapterAsync(snapshot, operationGeneration);
+                if (withinChapter == AdvanceAttemptResult.Advanced)
+                    return;
+                if (withinChapter == AdvanceAttemptResult.Failed)
+                {
+                    StopAfterUnconfirmedNextVideo("本章节仍有下一视频，但学习通没有确认切换成功。程序不会跳过该视频或把本章记为完成。");
+                    return;
+                }
+            }
 
             // DOM 任务结构无法识别时，只允许点击播放器明确标注为“下一视频”的控件。
             // “下一节/下一个任务”可能进入测试题，不能作为安全的自动续播路径。
-            if (App.Settings.Current.AutoPlayNextVideo && await TryAdvanceUsingPlatformNextControlAsync(snapshot))
-                return;
+            if (App.Settings.Current.AutoPlayNextVideo)
+            {
+                var platformNext = await TryAdvanceUsingPlatformNextControlAsync(snapshot, operationGeneration);
+                if (platformNext == AdvanceAttemptResult.Advanced)
+                    return;
+                if (platformNext == AdvanceAttemptResult.Failed)
+                {
+                    StopAfterUnconfirmedNextVideo("学习通显示了下一视频按钮，但没有确认切换成功。程序不会把本章记为完成。");
+                    return;
+                }
+            }
 
             var previousIndex = _vm.SelectedChapter?.Index ?? -1;
             var previousChapterId = _vm.SelectedChapter?.ChapterId;
@@ -1138,48 +1200,70 @@ public partial class MainWindow : Window
             _lastObservedPlayingRate,
             _playerTimer?.Interval ?? TimeSpan.FromMilliseconds(1500));
 
-    private async Task<bool> TryAdvanceUsingPlatformNextControlAsync(PlayerSnapshot endedSnapshot)
+    private async Task<AdvanceAttemptResult> TryAdvanceUsingPlatformNextControlAsync(
+        PlayerSnapshot endedSnapshot,
+        long operationGeneration)
     {
         if (_adapter is null || _isClosing || _automationPaused)
-            return false;
+            return AdvanceAttemptResult.NoCandidate;
 
         var submitted = await _adapter.ClickNativeNextVideoControlAsync();
         if (!submitted)
-            return false;
+            return AdvanceAttemptResult.NoCandidate;
 
         App.Logger.Info("CX-AUTO-NEXT-PLATFORM", "已点击学习通播放器明确标注的下一视频控件，等待真实播放器变化。 ");
-        return await WaitForRealAutoAdvanceAsync(endedSnapshot, "CX-AUTO-NEXT-PLATFORM", "学习通播放器下一视频控件");
+        var advanced = await WaitForRealAutoAdvanceAsync(
+            endedSnapshot,
+            "CX-AUTO-NEXT-PLATFORM",
+            "学习通播放器下一视频控件",
+            operationGeneration: operationGeneration);
+        return advanced ? AdvanceAttemptResult.Advanced : AdvanceAttemptResult.Failed;
     }
 
     private async Task<bool> WaitForRealAutoAdvanceAsync(
         PlayerSnapshot endedSnapshot,
         string logCode,
         string sourceLabel,
-        Func<Task<bool>>? retryTargetAction = null)
+        Func<Task<bool>>? retryTargetAction = null,
+        long? operationGeneration = null,
+        PlayerSnapshot? expectedTarget = null)
     {
         if (_adapter is null) return false;
+        var pageVersion = _pageVersion;
+        var expectedGeneration = operationGeneration ?? _automationGeneration;
 
         for (var attempt = 0; attempt < 30; attempt++)
         {
-            if (_isClosing || _automationPaused)
+            if (_isClosing || _automationPaused || !IsCurrentPage(pageVersion) ||
+                !IsAutomationOperationCurrent(expectedGeneration))
                 return false;
 
             await Task.Delay(350, _lifetimeCts.Token);
-            var candidate = await _adapter.GetPlayerSnapshotAsync();
+            if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration))
+                return false;
+            var candidate = await _adapter.GetPlayerSnapshotAsync(expectedTarget);
+            if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration))
+                return false;
+
+            if (retryTargetAction is not null && attempt is 5 or 14 or 23 &&
+                (!candidate.Found || candidate.Ended || IsSameMediaEvidence(endedSnapshot, candidate) ||
+                 !PlayerMediaEvidence.IsReadyForPlayback(candidate)))
+            {
+                await retryTargetAction();
+                if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration))
+                    return false;
+                App.Logger.Debug(logCode, $"{sourceLabel}尚未形成可播放的新播放器，重新激活目标任务点；attempt={attempt + 1}");
+            }
+
             if (!candidate.Found || candidate.Ended || IsSameMediaEvidence(endedSnapshot, candidate))
                 continue;
 
             if (!PlayerMediaEvidence.IsReadyForPlayback(candidate))
-            {
-                if (retryTargetAction is not null && attempt is 5 or 14 or 23)
-                {
-                    await retryTargetAction();
-                    App.Logger.Debug(logCode, $"{sourceLabel}已出现空播放器，重新激活目标任务点；attempt={attempt + 1}");
-                }
                 continue;
-            }
 
             var playback = await StartPlaybackWithRetryAsync(candidate, sourceLabel);
+            if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration))
+                return false;
             var playing = playback.Playing;
             candidate = playback.Snapshot;
 
@@ -1216,10 +1300,12 @@ public partial class MainWindow : Window
         return false;
     }
 
-    private async Task<bool> TryAdvanceWithinCurrentChapterAsync(PlayerSnapshot endedSnapshot)
+    private async Task<AdvanceAttemptResult> TryAdvanceWithinCurrentChapterAsync(
+        PlayerSnapshot endedSnapshot,
+        long operationGeneration)
     {
         if (_adapter is null || _isClosing || _automationPaused)
-            return false;
+            return AdvanceAttemptResult.NoCandidate;
 
         VideoTaskItem? nextTask = null;
         try
@@ -1259,25 +1345,38 @@ public partial class MainWindow : Window
             nextTask?.DocumentUrl,
             nextTask?.Source);
         if (!submitted)
-            return false;
+            return nextTask is null ? AdvanceAttemptResult.NoCandidate : AdvanceAttemptResult.Failed;
 
         App.Logger.Info("CX-AUTO-NEXT-IN-CHAPTER",
             nextTask is null
                 ? "已按页面相对顺序提交当前章节内下一视频切换，等待真实播放器核验。"
                 : $"已按扫描证据提交同章下一视频：{nextTask.DisplayTitle}；等待真实播放器核验。");
-        Func<Task<bool>>? retryTargetAction = nextTask is null
-            ? null
-            : () => _adapter.AdvanceToNextVideoTaskAsync(
+        Func<Task<bool>> retryTargetAction = () => _adapter.AdvanceToNextVideoTaskAsync(
                 endedSnapshot.MediaId,
                 endedSnapshot.Source,
-                nextTask.MediaId,
-                nextTask.DocumentUrl,
-                nextTask.Source);
-        return await WaitForRealAutoAdvanceAsync(
+                nextTask?.MediaId,
+                nextTask?.DocumentUrl,
+                nextTask?.Source);
+        var expectedTarget = nextTask is not null && nextTask.DomIndex >= 0
+            ? new PlayerSnapshot
+            {
+                Found = true,
+                TaskKey = nextTask.TaskKey,
+                ChapterId = nextTask.ChapterId,
+                DocumentUrl = nextTask.DocumentUrl,
+                Source = nextTask.Source,
+                MediaId = nextTask.MediaId,
+                DomIndex = nextTask.DomIndex
+            }
+            : null;
+        var advanced = await WaitForRealAutoAdvanceAsync(
             endedSnapshot,
             "CX-AUTO-NEXT-IN-CHAPTER",
             "同章节下一视频任务点",
-            retryTargetAction);
+            retryTargetAction,
+            operationGeneration,
+            expectedTarget);
+        return advanced ? AdvanceAttemptResult.Advanced : AdvanceAttemptResult.Failed;
     }
 
     private async Task<(bool Playing, PlayerSnapshot Snapshot)> StartPlaybackWithRetryAsync(
@@ -1288,13 +1387,17 @@ public partial class MainWindow : Window
             return (false, initial);
 
         var pageVersion = _pageVersion;
+        var expectedGeneration = _automationGeneration;
+        var target = initial;
         var current = initial;
         for (var attempt = 0; attempt < 4; attempt++)
         {
-            if (_isClosing || _automationPaused || !IsCurrentPage(pageVersion))
+            if (_isClosing || _automationPaused || !IsCurrentPage(pageVersion) ||
+                !IsAutomationOperationCurrent(expectedGeneration))
                 return (false, current);
 
-            if (current.Found && !current.Ended && !current.Paused)
+            if (current.Found && !current.Ended && !current.Paused &&
+                PlayerMediaEvidence.MatchesPlaybackTarget(target, current))
                 return (true, current);
 
             if (App.Settings.Current.PreservePlaybackRate &&
@@ -1302,18 +1405,19 @@ public partial class MainWindow : Window
                 Math.Abs(_lastObservedPlaybackRate - current.PlaybackRate) > 0.001)
             {
                 await _adapter.RestorePlaybackRateUsingUiAsync(_lastObservedPlaybackRate);
-                if (!IsCurrentPage(pageVersion)) return (false, current);
+                if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration)) return (false, current);
             }
 
-            var submitted = await _adapter.PlayVideoAsync(current);
-            if (!IsCurrentPage(pageVersion)) return (false, current);
+            var submitted = await _adapter.PlayVideoAsync(target);
+            if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration)) return (false, current);
             await Task.Delay(submitted ? 250 : 400, _lifetimeCts.Token);
-            if (!IsCurrentPage(pageVersion)) return (false, current);
+            if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration)) return (false, current);
 
-            var verified = await _adapter.GetPlayerSnapshotAsync();
-            if (verified.Found)
+            var verified = await _adapter.GetPlayerSnapshotAsync(target);
+            if (verified.Found && PlayerMediaEvidence.MatchesPlaybackTarget(target, verified))
                 current = verified;
-            if (current.Found && !current.Ended && !current.Paused)
+            if (current.Found && !current.Ended && !current.Paused &&
+                PlayerMediaEvidence.MatchesPlaybackTarget(target, current))
             {
                 App.Logger.Info("CX-AUTO-PLAY", $"{sourceLabel}自动播放确认成功；attempt={attempt + 1}");
                 return (true, current);
@@ -1444,11 +1548,16 @@ public partial class MainWindow : Window
 
             // 目录的“章节未完成”也可能只代表测验或作业。进入候选章节后必须重新读取真实视频状态；
             // 若视频全部完成，直接继续后续章节，不能把当前已完成播放器重新播放。
-            var targetTasks = (await _adapter.ScanVideoTasksAsync())
-                .Where(x => VideoTaskBelongsToChapter(x, pending) || x.IsPlaying || x.IsVisible)
-                .OrderBy(x => x.Index)
-                .ToArray();
-            if (CoursePlaybackPlan.AllKnownVideosCompleted(targetTasks))
+            var taskScan = await ScanTargetVideoTasksUntilStableAsync(pending);
+            if (_isClosing || _automationPaused || _pendingNextVideo != pending) return;
+            if (!taskScan.Stable)
+            {
+                await HandlePendingVideoUnavailableAsync(pending, "目标章节的视频任务仍在分批加载");
+                return;
+            }
+
+            var targetTasks = taskScan.Tasks;
+            if (targetTasks.Length > 0 && CoursePlaybackPlan.AllKnownVideosCompleted(targetTasks))
             {
                 await SkipChapterWithCompletedVideosAsync(pending);
                 return;
@@ -1462,7 +1571,7 @@ public partial class MainWindow : Window
                 await Task.Delay(250, _lifetimeCts.Token);
                 if (_isClosing || _automationPaused || _pendingNextVideo != pending) return;
                 var focused = await _adapter.GetPlayerSnapshotAsync();
-                if (focused.Found && !IsStaleEndedPlayer(focused) &&
+                if (PlayerMediaEvidence.IsReadyForPlayback(focused) && !IsStaleEndedPlayer(focused) &&
                     await PlayerMatchesTargetChapterAsync(pending, focused, allowCatalogEvidence: true))
                 {
                     player = focused;
@@ -1502,6 +1611,17 @@ public partial class MainWindow : Window
         ShowInAppNotice("本章视频已完成", $"“{completedChapter.DisplayTitle}”只剩测验或其他任务，正在继续查找未看完视频。", false);
 
         var next = FindNextSequentialNavigationCandidate(completedChapter.Index);
+        if (next is null)
+        {
+            var catalogResult = await RefreshCatalogUntilStatusReadyAsync(preserveSelection: true);
+            if (_isClosing || _automationPaused || _pendingNextVideo != completedChapter) return;
+            if (catalogResult != CatalogRefreshResult.Stable)
+            {
+                ShowContinueNextFallback(completedChapter, "后续章节目录仍在加载，尚未确认课程结束", chapterAlreadyConfirmed: true);
+                return;
+            }
+            next = FindNextSequentialNavigationCandidate(completedChapter.Index);
+        }
         if (next is null && !string.IsNullOrWhiteSpace(completedChapter.ChapterId))
         {
             next = await _adapter.FindNextChapterCandidateAsync(completedChapter.ChapterId);
@@ -1521,17 +1641,56 @@ public partial class MainWindow : Window
         NotifyUser("没有未看完视频", "已跳过视频全部完成的章节，后续暂未识别到仍需播放的视频。", false);
     }
 
+    private async Task<(VideoTaskItem[] Tasks, bool Stable)> ScanTargetVideoTasksUntilStableAsync(ChapterItem target)
+    {
+        if (_adapter is null)
+            return (Array.Empty<VideoTaskItem>(), false);
+
+        string? previousFingerprint = null;
+        var stableCount = 0;
+        VideoTaskItem[] latest = Array.Empty<VideoTaskItem>();
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            if (_isClosing || _automationPaused || _pendingNextVideo != target)
+                return (latest, false);
+
+            latest = (await _adapter.ScanVideoTasksAsync())
+                .Where(x => VideoTaskBelongsToChapter(x, target))
+                .OrderBy(x => x.Index)
+                .ToArray();
+            var fingerprint = string.Join("|", latest.Select(x =>
+                $"{VideoTaskIdentity(x)}:{x.Index}:{x.CompletionKnown}:{x.IsCompleted}"));
+            if (string.Equals(previousFingerprint, fingerprint, StringComparison.Ordinal))
+                stableCount++;
+            else
+            {
+                previousFingerprint = fingerprint;
+                stableCount = 1;
+            }
+
+            if (stableCount >= 3)
+                return (latest, true);
+
+            await Task.Delay(450 + attempt * 100, _lifetimeCts.Token);
+        }
+
+        return (latest, false);
+    }
+
     private async Task<PlayerSnapshot?> WaitForPendingPlayerSwitchAsync(ChapterItem target, PlayerSnapshot? originSnapshot)
     {
         if (_adapter is null) return null;
+        var expectedGeneration = _automationGeneration;
 
         for (var attempt = 0; attempt < 14; attempt++)
         {
-            if (_isClosing || _automationPaused || _pendingNextVideo != target)
+            if (_isClosing || _automationPaused || _pendingNextVideo != target ||
+                !IsAutomationOperationCurrent(expectedGeneration))
                 return null;
 
             var player = await _adapter.GetPlayerSnapshotAsync();
-            if (player.Found)
+            if (!IsAutomationOperationCurrent(expectedGeneration)) return null;
+            if (PlayerMediaEvidence.IsReadyForPlayback(player))
             {
                 var changed = originSnapshot?.Found != true || !IsSameMediaEvidence(originSnapshot, player);
                 var refreshStructure = attempt is 0 or 4 or 8 or 12;
@@ -1560,7 +1719,7 @@ public partial class MainWindow : Window
 
         var snapshot = knownSnapshot ?? await WaitForPendingPlayerSwitchAsync(target, _pendingOriginPlayerSnapshot);
         if (_pendingNextVideo != target || _isClosing) return;
-        if (snapshot is null || !snapshot.Found || IsStaleEndedPlayer(snapshot))
+        if (snapshot is null || !PlayerMediaEvidence.IsReadyForPlayback(snapshot) || IsStaleEndedPlayer(snapshot))
         {
             await HandlePendingVideoUnavailableAsync(target, "未确认播放器已经切到目标章节");
             return;
@@ -1650,15 +1809,26 @@ public partial class MainWindow : Window
             await PlayerMatchesTargetChapterAsync(target, player, allowCatalogEvidence: true))
             return false;
 
+        // 对视频/未知章节而言，一次空扫描不能证明没有视频；懒加载任务可能稍后才出现。
+        if (target.TaskType is TaskType.Video or TaskType.Unknown)
+            return false;
+
         var tasks = await _adapter.ScanVideoTasksAsync();
-        return !tasks.Any(x => VideoTaskBelongsToChapter(x, target) || x.IsPlaying || x.IsVisible);
+        return !tasks.Any(x => VideoTaskBelongsToChapter(x, target));
     }
 
     private async Task VerifyCourseCompletionOrContinueAsync(PlayerSnapshot endedSnapshot, int currentIndex)
     {
         EnsureCourseTraversalStarted(currentIndex);
-        await RefreshCatalogUntilStatusReadyAsync(endedSnapshot, preserveSelection: true);
+        var catalogResult = await RefreshCatalogUntilStatusReadyAsync(endedSnapshot, preserveSelection: true);
         if (_isClosing || _automationPaused) return;
+        if (catalogResult != CatalogRefreshResult.Stable)
+        {
+            ClearPendingNextVideo();
+            _stateMachine.Transition(AppRunState.WaitingForUser, "全课程复核等待稳定目录");
+            NotifyUser("课程目录仍在加载", "章节状态尚未稳定，因此不会提前显示课程完成。页面稳定后可再次点击开始。", false);
+            return;
+        }
 
         if (_vm.Chapters.Count == 0)
         {
@@ -2408,9 +2578,11 @@ public partial class MainWindow : Window
 
     private async void Start_Click(object sender, RoutedEventArgs e)
     {
-        if (_adapter is null || _isClosing || _isNavigating || _playerCommandInProgress)
+        if (_adapter is null || _isClosing || _isNavigating || _playerCommandInProgress ||
+            _manualChapterOpenInProgress || _pendingPreparationInProgress)
             return;
         _playerCommandInProgress = true;
+        BeginAutomationOperation();
         ShowInAppNotice("开始辅助", "正在识别当前课程和待播放视频。", false);
         var pageVersion = _pageVersion;
 
@@ -2435,8 +2607,13 @@ public partial class MainWindow : Window
 
             if (ChaoxingUrlClassifier.IsStudyUri(Browser.Source?.ToString()))
             {
-                if (await RefreshCatalogUntilStatusReadyAsync(bootstrapWhenEmpty: true))
+                var catalogResult = await RefreshCatalogUntilStatusReadyAsync(bootstrapWhenEmpty: true);
+                if (catalogResult != CatalogRefreshResult.Stable)
+                {
+                    if (catalogResult == CatalogRefreshResult.Unstable)
+                        NotifyUser("课程目录仍在加载", "章节状态仍在变化，程序不会提前选择目标。页面稳定后可再次点击开始。", false);
                     return;
+                }
                 if (!IsCurrentPage(pageVersion)) return;
                 var preferred = FindFirstUnfinishedNavigationCandidate(_vm.Chapters);
                 if (preferred is not null && !ChapterMatchesUri(preferred, Browser.Source?.ToString()) && !IsConfirmedChapter(preferred))
@@ -2731,15 +2908,22 @@ public partial class MainWindow : Window
 
     private async void JumpToUnfinished_Click(object sender, RoutedEventArgs e)
     {
-        if (_adapter is null || _manualChapterOpenInProgress)
+        if (_adapter is null || _manualChapterOpenInProgress || _playerCommandInProgress ||
+            _pendingPreparationInProgress)
             return;
         JumpToUnfinishedButton.IsEnabled = false;
+        BeginAutomationOperation();
         JumpToUnfinishedButton.Content = "正在查找…";
         ShowInAppNotice("查找未完成视频", "正在刷新任务点和章节状态。", false);
         try
         {
-            if (await RefreshCatalogUntilStatusReadyAsync(bootstrapWhenEmpty: true))
+            var catalogResult = await RefreshCatalogUntilStatusReadyAsync(bootstrapWhenEmpty: true);
+            if (catalogResult != CatalogRefreshResult.Stable)
+            {
+                if (catalogResult == CatalogRefreshResult.Unstable)
+                    NotifyUser("课程目录仍在加载", "章节状态仍在变化，程序不会提前选择目标。页面稳定后可再次点击查找。", false);
                 return;
+            }
             var chapter = FindFirstUnfinishedNavigationCandidate(_vm.Chapters) ??
                           FindFirstPendingNavigationCandidate(_vm.Chapters);
             if (chapter is null)
@@ -2770,9 +2954,11 @@ public partial class MainWindow : Window
 
     private async Task OpenChapterFromLibraryAsync(ChapterItem chapter)
     {
-        if (_adapter is null || _manualChapterOpenInProgress || _isClosing)
+        if (_adapter is null || _manualChapterOpenInProgress || _playerCommandInProgress ||
+            _pendingPreparationInProgress || _isClosing)
             return;
         _manualChapterOpenInProgress = true;
+        BeginAutomationOperation();
         try
         {
             WelcomePanel.Visibility = Visibility.Collapsed;
@@ -2896,6 +3082,12 @@ public partial class MainWindow : Window
         if (_adapter is null || _isClosing)
             return;
 
+        if (!PlayerMediaEvidence.IsReadyForPlayback(snapshot))
+        {
+            NotifyUser("视频仍在加载", "章节已经打开，但真实播放器尚未准备完成。程序不会提前确认切换，可稍后重新点击该章节。", false);
+            return;
+        }
+
         _manualPlaybackAfterNavigationTarget = null;
         _manualPlaybackOriginSnapshot = null;
         _lastPlayerIdentity = PlayerIdentity(snapshot);
@@ -2940,10 +3132,11 @@ public partial class MainWindow : Window
     private async Task<PlayerSnapshot?> WaitForManualPlayerSwitchAsync(ChapterItem target, PlayerSnapshot beforeSnapshot, bool allowCurrentPlayer)
     {
         if (_adapter is null) return null;
+        var expectedGeneration = _automationGeneration;
 
         for (var attempt = 0; attempt < 18; attempt++)
         {
-            if (_isClosing) return null;
+            if (_isClosing || !IsAutomationOperationCurrent(expectedGeneration)) return null;
             if (_isNavigating)
             {
                 await Task.Delay(300, _lifetimeCts.Token);
@@ -2951,7 +3144,8 @@ public partial class MainWindow : Window
             }
 
             var snapshot = await _adapter.GetPlayerSnapshotAsync();
-            if (snapshot.Found)
+            if (!IsAutomationOperationCurrent(expectedGeneration)) return null;
+            if (PlayerMediaEvidence.IsReadyForPlayback(snapshot))
             {
                 var identity = PlayerIdentity(snapshot);
                 var changed = !beforeSnapshot.Found || !IsSameMediaEvidence(beforeSnapshot, snapshot);
@@ -3177,6 +3371,8 @@ public partial class MainWindow : Window
 
     private void SetAutomationPaused(bool paused)
     {
+        if (paused && !_automationPaused)
+            BeginAutomationOperation();
         _automationPaused = paused;
         PauseAutomationButton.Content = paused ? "继续辅助" : "暂停辅助";
         _vm.AutomationStatusText = paused ? "辅助未启用" : "辅助运行中";
@@ -3193,6 +3389,20 @@ public partial class MainWindow : Window
             paused ? "自动辅助已暂停" : "自动辅助已开启",
             paused ? "当前视频不受影响，但不会自动查找和切换下一视频。" : "将继续识别未完成视频，并在自然结束后自动续播。",
             false);
+    }
+
+    private long BeginAutomationOperation()
+        => Interlocked.Increment(ref _automationGeneration);
+
+    private bool IsAutomationOperationCurrent(long generation)
+        => generation == Interlocked.Read(ref _automationGeneration);
+
+    private void StopAfterUnconfirmedNextVideo(string message)
+    {
+        _stateMachine.Transition(AppRunState.WaitingForUser, "下一视频切换尚未确认");
+        _vm.PlaybackStatusText = "下一视频尚未切换成功";
+        UpdateCompositeStatus();
+        NotifyUser("下一视频没有跳过", message + " 可等待页面稳定后再次点击开始。", false);
     }
 
     private async void ShowInAppNotice(string title, string message, bool isError)

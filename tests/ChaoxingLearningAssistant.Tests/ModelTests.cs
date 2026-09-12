@@ -345,6 +345,23 @@ public sealed class ModelTests
     }
 
     [TestMethod]
+    public void VideoTaskEvidence_DoesNotMergeRepeatedMediaIdAcrossDifferentFrames()
+    {
+        var parent = new VideoTaskItem
+        {
+            Title = "第二个视频", ChapterId = "chapter-9", MediaId = "shared",
+            Source = "https://player.example/frame-b", DomIndex = -1
+        };
+        var real = new VideoTaskItem
+        {
+            Title = "第一个视频", ChapterId = "chapter-9", MediaId = "shared",
+            DocumentUrl = "https://player.example/frame-a", DomIndex = 0
+        };
+
+        Assert.IsFalse(VideoTaskEvidence.PlaceholderMatchesReal(parent, real));
+    }
+
+    [TestMethod]
     public void PlayerMediaEvidence_IgnoresLateTitleAndDurationButDetectsNewSource()
     {
         var before = new PlayerSnapshot
@@ -387,6 +404,43 @@ public sealed class ModelTests
 
         Assert.IsFalse(PlayerMediaEvidence.IsReadyForPlayback(empty));
         Assert.IsTrue(PlayerMediaEvidence.IsReadyForPlayback(loaded));
+    }
+
+    [TestMethod]
+    public void PlaybackTarget_AllowsEmptyPlayerToLoadButRejectsAnotherDomPosition()
+    {
+        var target = new PlayerSnapshot
+        {
+            Found = true, DocumentUrl = "https://player.example/frame", DomIndex = 1,
+            Paused = true, Duration = 0, ReadyState = 0
+        };
+        var loaded = new PlayerSnapshot
+        {
+            Found = true, DocumentUrl = "https://player.example/frame", DomIndex = 1,
+            Source = "https://cdn.example/b.mp4", MediaId = "b", Duration = 120, ReadyState = 4
+        };
+        var stale = new PlayerSnapshot
+        {
+            Found = true, DocumentUrl = "https://player.example/frame", DomIndex = 0,
+            Source = "https://cdn.example/b.mp4", MediaId = "b", Duration = 120, ReadyState = 4
+        };
+
+        Assert.IsTrue(PlayerMediaEvidence.MatchesPlaybackTarget(target, loaded));
+        Assert.IsFalse(PlayerMediaEvidence.MatchesPlaybackTarget(target, stale));
+    }
+
+    [TestMethod]
+    public void SensitiveDataRedactor_RemovesUrlHeadersAndCookies()
+    {
+        var input = "https://example.test/watch?chapterId=3&token=secret-token&enc=secret-enc " +
+                    "Authorization: Bearer secret-bearer\nCookie: UID=secret-cookie";
+        var output = SensitiveDataRedactor.Redact(input);
+
+        Assert.IsFalse(output.Contains("secret-token", StringComparison.Ordinal));
+        Assert.IsFalse(output.Contains("secret-enc", StringComparison.Ordinal));
+        Assert.IsFalse(output.Contains("secret-bearer", StringComparison.Ordinal));
+        Assert.IsFalse(output.Contains("secret-cookie", StringComparison.Ordinal));
+        Assert.IsTrue(output.Contains("chapterId=3", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -449,6 +503,25 @@ public sealed class ModelTests
 
         Assert.IsTrue(PlayerMediaEvidence.IsSameMedia(before, refreshed));
         Assert.IsFalse(PlayerMediaEvidence.IsSameMedia(refreshed, next));
+    }
+
+    [TestMethod]
+    public void PlayerMediaEvidence_ToleratesQueryRotationInScannerGeneratedTaskKey()
+    {
+        var before = new PlayerSnapshot
+        {
+            Found = true, Source = "https://cdn.example/course/a.mp4?token=old", MediaId = "shared",
+            TaskKey = "media:shared|src:https://cdn.example/course/a.mp4?token=old|doc:https://player.example/frame|dom:0",
+            DocumentUrl = "https://player.example/frame", DomIndex = 0
+        };
+        var refreshed = new PlayerSnapshot
+        {
+            Found = true, Source = "https://cdn.example/course/a.mp4?token=new", MediaId = "shared",
+            TaskKey = "media:shared|src:https://cdn.example/course/a.mp4?token=new|doc:https://player.example/frame|dom:0",
+            DocumentUrl = "https://player.example/frame", DomIndex = 0
+        };
+
+        Assert.IsTrue(PlayerMediaEvidence.IsSameMedia(before, refreshed));
     }
 
     [TestMethod]

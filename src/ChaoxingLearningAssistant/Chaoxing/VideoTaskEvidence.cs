@@ -13,14 +13,21 @@ public static class VideoTaskEvidence
         if (placeholder.DomIndex >= 0 || real.DomIndex < 0)
             return false;
 
+        if (!string.IsNullOrWhiteSpace(placeholder.Source) &&
+            !string.IsNullOrWhiteSpace(real.DocumentUrl))
+            return UriEquivalent(placeholder.Source, real.DocumentUrl);
+
+        // 平台可能在同一章节复用 mediaId。只有缺少 iframe 文档关系且章节与标题也一致时，
+        // 才允许 mediaId 作为降级证据，避免把第二个占位任务合并进第一个真实播放器。
         if (!string.IsNullOrWhiteSpace(placeholder.MediaId) &&
             !string.IsNullOrWhiteSpace(real.MediaId) &&
-            string.Equals(placeholder.MediaId, real.MediaId, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        if (!string.IsNullOrWhiteSpace(placeholder.Source) &&
-            !string.IsNullOrWhiteSpace(real.DocumentUrl) &&
-            UriEquivalent(placeholder.Source, real.DocumentUrl))
+            string.Equals(placeholder.MediaId, real.MediaId, StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(placeholder.ChapterId) &&
+            !string.IsNullOrWhiteSpace(real.ChapterId) &&
+            string.Equals(placeholder.ChapterId, real.ChapterId, StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(placeholder.Title) &&
+            !string.IsNullOrWhiteSpace(real.Title) &&
+            string.Equals(NormalizeTitle(placeholder.Title), NormalizeTitle(real.Title), StringComparison.OrdinalIgnoreCase))
             return true;
 
         // 标题只能作为同章节内的补充证据，禁止仅凭“视频一/课程视频”之类重复标题跨章节合并。

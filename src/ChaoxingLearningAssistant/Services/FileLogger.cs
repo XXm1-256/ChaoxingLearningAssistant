@@ -52,14 +52,15 @@ public sealed class FileLogger
     private void Write(string level, string code, string message, Exception? ex)
     {
         var now = DateTime.Now;
+        var safeMessage = SensitiveDataRedactor.Redact(message);
         var line = new StringBuilder()
             .Append(now.ToString("yyyy-MM-dd HH:mm:ss.fff"))
             .Append(" [").Append(level).Append("] ")
             .Append(code).Append(" - ")
-            .Append(message);
+            .Append(safeMessage);
 
         if (ex is not null)
-            line.AppendLine().Append(ex);
+            line.AppendLine().Append(SensitiveDataRedactor.Redact(ex.ToString()));
 
         var text = line.ToString();
         var path = Path.Combine(_directory, $"{now:yyyy-MM-dd}.log");
@@ -71,7 +72,7 @@ public sealed class FileLogger
 
         try
         {
-            EntryWritten?.Invoke(this, new LogEntry(now, level, code, message));
+            EntryWritten?.Invoke(this, new LogEntry(now, level, code, safeMessage));
         }
         catch
         {

@@ -1,14 +1,16 @@
-﻿param(
+param(
     [string]$OutputDirectory = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 )
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 $Publish = Join-Path $Root 'artifacts\publish\win-x64'
+$FullReadyMarker = Join-Path $Root 'artifacts\FULL_BUILD_READY.txt'
+$ProjectFile = Join-Path $Root 'src\ChaoxingLearningAssistant\ChaoxingLearningAssistant.csproj'
 $Stage = Join-Path $Root ('artifacts\github-release-' + [Guid]::NewGuid().ToString('N'))
 $ProgramFolderName = -join @(0x5B66,0x4E60,0x901A,0x8BFE,0x7A0B,0x89C6,0x9891,0x64AD,0x653E,0x52A9,0x624B | ForEach-Object { [char]$_ })
 $Program = Join-Path $Stage $ProgramFolderName
-$Destination = Join-Path $OutputDirectory 'ChaoxingLearningAssistant_v1.42_Windows.zip'
+$Destination = Join-Path $OutputDirectory 'ChaoxingLearningAssistant_v1.43_Windows.zip'
 $TutorialMarkdown = Join-Path $Root '使用教学.md'
 $TutorialDocx = Join-Path $Root '使用教学.docx'
 $TutorialPdf = Join-Path $Root '使用教学.pdf'
@@ -19,8 +21,24 @@ foreach ($tutorial in @($TutorialMarkdown, $TutorialDocx, $TutorialPdf, $FaqMark
     if (-not (Test-Path -LiteralPath $tutorial)) { throw "Tutorial file is missing: $tutorial" }
 }
 
-if (-not (Test-Path -LiteralPath (Join-Path $Publish 'ChaoxingLearningAssistant.exe'))) {
+$PublishedExe = Join-Path $Publish 'ChaoxingLearningAssistant.exe'
+if (-not (Test-Path -LiteralPath $PublishedExe)) {
     throw 'Run BUILD_FULL.bat first; self-contained win-x64 output is missing.'
+}
+[xml]$ProjectXml = Get-Content -LiteralPath $ProjectFile
+$ExpectedVersion = [string]$ProjectXml.Project.PropertyGroup.Version
+$ActualVersion = (Get-Item -LiteralPath $PublishedExe).VersionInfo.FileVersion
+if ($ActualVersion -notlike "$ExpectedVersion*") {
+    throw "Published EXE version mismatch: expected $ExpectedVersion, found $ActualVersion"
+}
+if (-not (Test-Path -LiteralPath $FullReadyMarker)) {
+    throw 'Run BUILD_FULL.bat first; the full-build verification marker is missing.'
+}
+$Marker = Get-Content -LiteralPath $FullReadyMarker -Raw
+$ActualHash = (Get-FileHash -LiteralPath $PublishedExe -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($Marker -notmatch [regex]::Escape("Version: $ExpectedVersion") -or
+    $Marker -notmatch [regex]::Escape("ExeSha256: $ActualHash")) {
+    throw 'The publish directory does not match the latest verified full build.'
 }
 
 New-Item -ItemType Directory -Path $Program -Force | Out-Null

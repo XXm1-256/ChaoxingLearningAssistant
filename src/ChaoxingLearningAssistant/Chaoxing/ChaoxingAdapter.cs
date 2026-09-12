@@ -504,10 +504,16 @@ public sealed class ChaoxingAdapter : IDisposable
   };
   const out = [];
   const seen = new Set();
+  // 真实 video 与尚未创建 video 的 iframe 必须共用同一套父任务 DOM 顺序。
+  const blocks = Array.from(new Set(Array.from(document.querySelectorAll(
+    '.ans-video,.ans-attach-ct,.ans-job,.ans-videoquiz,.task-point,.taskPoint,[data-type*="video"],[class*="ans-video"]'
+  ))));
   const videos = Array.from(document.querySelectorAll('video'));
   for (let i = 0; i < videos.length; i++) {
     const v = videos[i];
     const block = taskBlock(v);
+    const blockIndex = blocks.indexOf(block);
+    const pageOrder = blockIndex >= 0 ? blockIndex : blocks.length + i;
     const mediaId = mediaIdOf(v, block);
     const source = norm(v.currentSrc || v.src || '');
     const chapterId = chapterIdFromNode(v) || chapterIdFromUrl(location.href);
@@ -518,17 +524,13 @@ public sealed class ChaoxingAdapter : IDisposable
     seen.add(taskKey);
     const done = completion(block);
     out.push({
-      index:i, taskKey, title:titleOf(v,block), chapterId, chapterTitle:chapterTitleFromNode(v),
+      index:pageOrder, taskKey, title:titleOf(v,block), chapterId, chapterTitle:chapterTitleFromNode(v),
       documentUrl:location.href, source, mediaId, domIndex:i, isVisible,
       isPlaying:!v.paused && !v.ended, isCompleted:done === true, completionKnown:done !== null
     });
   }
 
   // 部分模板的视频任务先以 iframe/任务块存在，video 只有激活后才创建。
-  const blocks = Array.from(new Set(Array.from(document.querySelectorAll(
-    '.ans-video,.ans-attach-ct,.ans-job,.ans-videoquiz,.task-point,.taskPoint,[data-type*="video"],[class*="ans-video"]'
-  ))));
-  let blockOrder = videos.length;
   for (const block of blocks) {
     if (block.querySelector?.('video')) continue;
     const iframe = block.querySelector?.('iframe');
@@ -544,6 +546,7 @@ public sealed class ChaoxingAdapter : IDisposable
     const mediaId = mediaIdOf(null, block);
     const source = norm(iframe?.src || attr(iframe,'src') || attr(iframe,'_src'));
     const chapterId = chapterIdFromNode(block) || chapterIdFromUrl(location.href);
+    const blockOrder = blocks.indexOf(block);
     const taskKey = mediaId ? `media:${mediaId}|src:${source}|doc:${location.href}|block:${blockOrder}` : source ? `frame:${source}` : `doc:${location.href}|block:${blockOrder}`;
     if (seen.has(taskKey)) continue;
     seen.add(taskKey);
@@ -554,7 +557,6 @@ public sealed class ChaoxingAdapter : IDisposable
       documentUrl:location.href, source, mediaId, domIndex:-1, isVisible:rect.width > 10 && rect.height > 10,
       isPlaying:false, isCompleted:done === true, completionKnown:done !== null
     });
-    blockOrder++;
   }
   return out.slice(0,800);
 })()
@@ -709,7 +711,7 @@ public sealed class ChaoxingAdapter : IDisposable
   const tail = entries.slice(index + 1).filter(allowed);
   // 自然播放结束后的“下一章”按目录顺序推进：优先明确未完成，
   // 平台没有暴露完成状态时也允许选择未知项；只跳过明确已完成项。
-  const x = tail.find(x => x.completion === false) || tail.find(x => x.completion === null);
+  const x = tail.find(x => x.completion !== true);
   if (!x) return null;
   return {
     title: x.title || (x.id ? `章节 ${x.id}` : '下一章节'),
@@ -743,7 +745,7 @@ public sealed class ChaoxingAdapter : IDisposable
   const genericCourseTitle = value => /^(?:学习通|课程|我的课程|学生学习页面|学生学习|学习页面|课程学习|章节学习|任务学习|学生课程|课程页面)$/i.test(normalize(value));
   const text = normalize(document.body?.innerText || '').slice(0, 120000);
   let reason = '';
-  const manualWords = ['验证码','人脸','安全验证','人工验证','滑块验证','身份验证','风险验证'];
+  const manualWords = ['验证码','人脸','安全验证','人工验证','滑块验证','身份验证','风险验证','学校认证','统一身份认证','登录失效','请重新登录'];
   for (const w of manualWords) {
     if (text.includes(w)) { reason = w; break; }
   }
@@ -808,11 +810,22 @@ public sealed class ChaoxingAdapter : IDisposable
         };
     }
 
-    public async Task<PlayerSnapshot> GetPlayerSnapshotAsync()
+    public async Task<PlayerSnapshot> GetPlayerSnapshotAsync(PlayerSnapshot? target = null)
     {
-        const string script = """
+        var hasTarget = target?.Found == true;
+        var targetSource = JsonSerializer.Serialize(target?.Source ?? string.Empty);
+        var targetMediaId = JsonSerializer.Serialize(target?.MediaId ?? string.Empty);
+        var targetDocumentUrl = JsonSerializer.Serialize(target?.DocumentUrl ?? string.Empty);
+        var targetDomIndex = target?.DomIndex ?? -1;
+        var script = $$"""
 (() => {
+  const hasTarget = {{(hasTarget ? "true" : "false")}};
+  const targetSource = {{targetSource}};
+  const targetMediaId = {{targetMediaId}};
+  const targetDocumentUrl = {{targetDocumentUrl}};
+  const targetDomIndex = {{targetDomIndex}};
   const normalize = s => (s || '').replace(/\s+/g,' ').trim();
+  const attr = (el, name) => el?.getAttribute?.(name) || '';
   const cleanVideoTitle = raw => {
     let s = normalize(raw);
     s = s.replace(/\b(?:未完成|未看完|待完成任务点|待完成|未开始|进行中|已完成|已看完|全部完成)\b/gi, ' ');
@@ -831,11 +844,55 @@ public sealed class ChaoxingAdapter : IDisposable
     return '';
   };
   const videos = Array.from(document.querySelectorAll('video'));
+  const notFound = () => ({
+    found:false, currentTime:0, duration:0, playbackRate:1, paused:true, ended:false,
+    readyState:0, source:'', mediaId:'', domIndex:-1, isVisible:false, taskKey:'', documentUrl:location.href,
+    chapterId:chapterIdFromUrl(location.href), chapterTitleHint:'', videoTitle:''
+  });
   if (!videos.length) return {
     found:false, currentTime:0, duration:0, playbackRate:1, paused:true, ended:false,
     readyState:0, source:'', mediaId:'', domIndex:-1, isVisible:false, taskKey:'', documentUrl:location.href,
     chapterId:chapterIdFromUrl(location.href), chapterTitleHint:'', videoTitle:''
   };
+  if (hasTarget && targetDocumentUrl && normalize(location.href) !== normalize(targetDocumentUrl))
+    return notFound();
+  const domOrder = videos.slice();
+  const sourceOf = v => normalize(v?.currentSrc || v?.src || '');
+  const sameSourcePath = (left, right) => {
+    try {
+      const a = new URL(left, location.href), b = new URL(right, location.href);
+      return a.protocol === b.protocol && a.host === b.host && a.pathname === b.pathname;
+    } catch { return false; }
+  };
+  const mediaIdOf = v => {
+    const block = v?.closest?.('.ans-video,.ans-attach-ct,.ans-job,.ans-videoquiz,.video-box,.videoBox,.video-container,.task-point,.taskPoint,[data-objectid],[data-object-id]') || v?.parentElement;
+    return [
+      attr(v,'data-objectid'), attr(v,'data-object-id'), attr(v,'data-id'), attr(v,'data-mid'),
+      attr(block,'data-objectid'), attr(block,'data-object-id'), attr(block,'data-id'), attr(block,'data-mid'),
+      attr(block,'data-attachment'), attr(block,'data-attach-id')
+    ].map(normalize).find(Boolean) || '';
+  };
+  const matchesTarget = candidate => {
+    const index = domOrder.indexOf(candidate);
+    let matched = false;
+    if (targetDomIndex >= 0) {
+      if (index !== targetDomIndex) return false;
+      matched = true;
+    }
+    const source = sourceOf(candidate);
+    if (targetSource && source) {
+      if (source !== normalize(targetSource) && !sameSourcePath(source, targetSource)) return false;
+      matched = true;
+    }
+    const mediaId = mediaIdOf(candidate);
+    if (targetMediaId && mediaId) {
+      if (mediaId !== normalize(targetMediaId)) return false;
+      matched = true;
+    }
+    return matched;
+  };
+  const targetedVideo = hasTarget ? domOrder.find(matchesTarget) : null;
+  if (hasTarget && !targetedVideo) return notFound();
   const score = v => {
     const r = v.getBoundingClientRect();
     const visible = r.width > 10 && r.height > 10 ? 1000000 : 0;
@@ -844,14 +901,12 @@ public sealed class ChaoxingAdapter : IDisposable
     const d = Number.isFinite(v.duration) ? v.duration : 0;
     return visible + playing + notEnded + d;
   };
-  const domOrder = videos.slice();
   videos.sort((a,b) => score(b)-score(a));
-  const v = videos[0];
+  const v = targetedVideo || videos[0];
   const domIndex = domOrder.indexOf(v);
   const rect = v.getBoundingClientRect?.() || { width:0, height:0 };
   const isVisible = rect.width > 10 && rect.height > 10;
   const block = v.closest?.('.ans-video,.ans-attach-ct,.ans-job,.ans-videoquiz,.video-box,.videoBox,.video-container,.task-point,.taskPoint,[data-objectid],[data-object-id]') || v.parentElement;
-  const attr = (el, name) => el?.getAttribute?.(name) || '';
   const mediaId = [
     attr(v,'data-objectid'), attr(v,'data-object-id'), attr(v,'data-id'), attr(v,'data-mid'),
     attr(block,'data-objectid'), attr(block,'data-object-id'), attr(block,'data-id'), attr(block,'data-mid'),
@@ -961,8 +1016,15 @@ public sealed class ChaoxingAdapter : IDisposable
   const norm = s => (s || '').trim();
   const attr = (el, name) => el?.getAttribute?.(name) || '';
   const videos = Array.from(document.querySelectorAll('video'));
+  if (hasTarget && targetDocumentUrl && norm(location.href) !== norm(targetDocumentUrl)) return 0;
   const domOrder = videos.slice();
   const sourceOf = v => norm(v?.currentSrc || v?.src || '');
+  const sameSourcePath = (left, right) => {
+    try {
+      const a = new URL(left, location.href), b = new URL(right, location.href);
+      return a.protocol === b.protocol && a.host === b.host && a.pathname === b.pathname;
+    } catch { return false; }
+  };
   const mediaIdOf = v => {
     const block = v?.closest?.('.ans-video,.ans-attach-ct,.ans-job,.ans-videoquiz,.video-box,.videoBox,.video-container,.task-point,.taskPoint,[data-objectid],[data-object-id]') || v?.parentElement;
     return [
@@ -978,11 +1040,22 @@ public sealed class ChaoxingAdapter : IDisposable
   const v = hasTarget
     ? videos.find(candidate => {
         const index = domOrder.indexOf(candidate);
-        if (targetSource && sourceOf(candidate) === norm(targetSource)) return true;
-        if (targetDocumentUrl && norm(location.href) !== norm(targetDocumentUrl)) return false;
-        if (targetMediaId && mediaIdOf(candidate) === norm(targetMediaId) &&
-            (targetDomIndex < 0 || index === targetDomIndex)) return true;
-        return targetDomIndex >= 0 && index === targetDomIndex && !!targetDocumentUrl;
+        let matched = false;
+        if (targetDomIndex >= 0) {
+          if (index !== targetDomIndex) return false;
+          matched = true;
+        }
+        const source = sourceOf(candidate);
+        if (targetSource && source) {
+          if (source !== norm(targetSource) && !sameSourcePath(source, targetSource)) return false;
+          matched = true;
+        }
+        const mediaId = mediaIdOf(candidate);
+        if (targetMediaId && mediaId) {
+          if (mediaId !== norm(targetMediaId)) return false;
+          matched = true;
+        }
+        return matched;
       })
     : videos[0];
   if (!v) return 0;
@@ -1000,10 +1073,10 @@ public sealed class ChaoxingAdapter : IDisposable
         for (var attempt = 0; attempt < 5; attempt++)
         {
             if (_disposed || documentVersion != _documentVersion) return false;
-            var snapshot = await GetPlayerSnapshotAsync();
+            var snapshot = await GetPlayerSnapshotAsync(target);
             if (_disposed || documentVersion != _documentVersion) return false;
             if (snapshot.Found && !snapshot.Paused && !snapshot.Ended &&
-                (!hasTarget || target is null || PlayerMediaEvidence.IsSameMedia(target, snapshot)))
+                (!hasTarget || target is null || PlayerMediaEvidence.MatchesPlaybackTarget(target, snapshot)))
                 return true;
             await Task.Delay(150);
         }
@@ -1213,8 +1286,8 @@ public sealed class ChaoxingAdapter : IDisposable
     '.ans-attach-ct,.ans-job,.ans-videoquiz,.task-point,.taskPoint,[data-type*="video"],[class*="ans-video"]'
   )))).filter(isVideoTask);
   if (!blocks.length) return false;
-  // 明确未完成优先；平台没有给状态的视频仍视为待核验，不能在连续播放中跳过。
-  const target = blocks.find(x => completion(x) === false) || blocks.find(x => completion(x) === null);
+  // 严格按页面顺序选择第一条未明确完成的视频；未知项必须先核验，不能越过。
+  const target = blocks.find(x => completion(x) !== true);
   if (!target) return false;
   try { target.scrollIntoView?.({ block:'center', behavior:'auto' }); } catch {}
   const clickTarget = target.querySelector?.(

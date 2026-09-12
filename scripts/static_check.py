@@ -127,15 +127,15 @@ if app_xaml.exists():
         if count != 1:
             errors.append(f"UI-REV regression: expected exactly one implicit {target} style, found {count}")
 
-launcher = ROOT / "BUILD_V1_42.bat"
+launcher = ROOT / "BUILD_V1_43.bat"
 if not launcher.exists():
-    errors.append("Missing BUILD_V1_42.bat")
+    errors.append("Missing BUILD_V1_43.bat")
 else:
     raw = launcher.read_bytes()
     if raw.startswith(b"\xef\xbb\xbf") or any(ch >= 128 for ch in raw):
-        errors.append("BUILD_V1_42.bat must remain ASCII/no-BOM")
-    if b"Build v1.42" not in raw:
-        errors.append("BUILD_V1_42.bat version banner mismatch")
+        errors.append("BUILD_V1_43.bat must remain ASCII/no-BOM")
+    if b"Build v1.43" not in raw:
+        errors.append("BUILD_V1_43.bat version banner mismatch")
 
 
 # v1.10 real-runtime UI acceptance regression guards.
@@ -193,11 +193,11 @@ if main_xaml.exists():
             errors.append("ERR-RUNTIME-001 regression: ProgressPercent ProgressBar binding must be Mode=OneWay")
 
 
-launcher_v112 = ROOT / "BUILD_V1_42.bat"
+launcher_v112 = ROOT / "BUILD_V1_43.bat"
 if launcher_v112.exists():
     launcher_text_v112 = launcher_v112.read_text(encoding="ascii", errors="ignore")
-    if "Build Log v1.42" not in launcher_text_v112:
-        errors.append("VER-MGMT-002 regression: BUILD_LOG header must match v1.42")
+    if "Build Log v1.43" not in launcher_text_v112:
+        errors.append("VER-MGMT-002 regression: BUILD_LOG header must match v1.43")
 
 # v1.13: inspect XML attribute values rather than stopping at StringFormat's nested braces.
 for path in ROOT.rglob("*.xaml"):
@@ -215,8 +215,8 @@ for path in ROOT.rglob("*.xaml"):
                 errors.append(f"ERR-RUNTIME-002: display-only {tag}.{name} requires OneWay: {path.relative_to(ROOT)}")
 
 project_xml = ET.parse(ROOT / "src/ChaoxingLearningAssistant/ChaoxingLearningAssistant.csproj")
-if project_xml.findtext(".//Version") != "1.42.0":
-    errors.append("Project version must be 1.42.0")
+if project_xml.findtext(".//Version") != "1.43.0":
+    errors.append("Project version must be 1.43.0")
 
 # v1.14: chapter catalog, continuous playback, and login-stability guards.
 chapter_model = ROOT / "src/ChaoxingLearningAssistant/Models/ChapterItem.cs"
@@ -401,7 +401,7 @@ for path in visible_xaml:
 if main_xaml.exists():
     ui_v119 = main_xaml.read_text(encoding="utf-8-sig", errors="ignore")
     for token in (
-        'Title="学习通课程视频播放助手 v1.42"',
+        'Title="学习通课程视频播放助手 v1.43"',
         'Text="课程目录"',
         'Text="运行状态"',
         'Text="下一视频"',
@@ -589,9 +589,9 @@ if adapter_cs.exists():
     for token in (
         "playerFrames = Array.from(document.querySelectorAll('iframe[src]'))",
         "VideoTaskEvidence.MergeParentEvidence(real, parent)",
-        "const target = blocks.find(x => completion(x) === false) || blocks.find(x => completion(x) === null);",
+        "const target = blocks.find(x => completion(x) !== true);",
         "if (completion(block) === true) continue;",
-        "const x = tail.find(x => x.completion === false) || tail.find(x => x.completion === null);",
+        "const x = tail.find(x => x.completion !== true);",
     ):
         if token not in a123:
             errors.append(f"v1.23 regression: adapter missing P0 guard {token}")
@@ -880,6 +880,53 @@ for path, tokens in {
     for token in tokens:
         if token not in source:
             errors.append(f"v1.41 regression: {path.name} missing {token}")
+
+# v1.43 keeps one immutable playback target, preserves mixed lazy-task order,
+# distinguishes failed switching from a real end-of-chapter, and redacts diagnostics.
+sensitive_redactor = ROOT / "src" / "ChaoxingLearningAssistant" / "Services" / "SensitiveDataRedactor.cs"
+package_v143 = ROOT / "scripts" / "package_v1_43.ps1"
+v143_checks = {
+    adapter_cs: (
+        "pageOrder", "blocks.indexOf(block)", "targetDocumentUrl && norm(location.href)",
+        "completion(x) !== true", "GetPlayerSnapshotAsync(PlayerSnapshot? target = null)"
+    ),
+    player_media_evidence: (
+        "MatchesPlaybackTarget", "LooksSourceDerivedTaskKey"
+    ),
+    ROOT / "src" / "ChaoxingLearningAssistant" / "Chaoxing" / "VideoTaskEvidence.cs": (
+        "return UriEquivalent(placeholder.Source, real.DocumentUrl)",
+    ),
+    main_cs: (
+        "AdvanceAttemptResult", "StopAfterUnconfirmedNextVideo", "BeginAutomationOperation",
+        "CatalogRefreshResult.Unstable", "ScanTargetVideoTasksUntilStableAsync",
+        "PlayerMediaEvidence.IsReadyForPlayback(snapshot)"
+    ),
+    sensitive_redactor: ("QuerySecretRegex", "HeaderSecretRegex", "CookieSecretRegex"),
+    ROOT / "src" / "ChaoxingLearningAssistant" / "Services" / "DiagnosticService.cs": (
+        "SensitiveDataRedactor.Redact(snapshotJson)", "SensitiveDataRedactor.Redact(File.ReadAllText(log))"
+    ),
+    release_packager: ("FULL_BUILD_READY.txt", "ExeSha256", "Published EXE version mismatch"),
+    restore_master: ("archive.testzip()", "Duplicate archive path", "temp_dest.replace(dest)"),
+    adapter_regression: (
+        "target dom position prevents an older player", "reserve the shared parent-block position"
+    ),
+    model_tests: (
+        "VideoTaskEvidence_DoesNotMergeRepeatedMediaIdAcrossDifferentFrames",
+        "SensitiveDataRedactor_RemovesUrlHeadersAndCookies",
+        "PlayerMediaEvidence_ToleratesQueryRotationInScannerGeneratedTaskKey"
+    ),
+}
+if (ROOT / "ERROR_ARCHIVE.md").exists():
+    v143_checks[package_v143] = ("$parts -notcontains 'Data'", "$parts -notcontains 'WebView2'")
+
+for path, tokens in v143_checks.items():
+    if not path.exists():
+        errors.append(f"v1.43 regression: missing {path.relative_to(ROOT)}")
+        continue
+    source = path.read_text(encoding="utf-8-sig", errors="ignore")
+    for token in tokens:
+        if token not in source:
+            errors.append(f"v1.43 regression: {path.name} missing {token}")
 
 
 if errors:

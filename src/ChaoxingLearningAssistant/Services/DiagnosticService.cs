@@ -29,15 +29,17 @@ public sealed class DiagnosticService
             Snapshot = snapshot
         };
 
+        var snapshotJson = JsonSerializer.Serialize(info, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(
             Path.Combine(work, "snapshot.json"),
-            JsonSerializer.Serialize(info, new JsonSerializerOptions { WriteIndented = true }));
+            SensitiveDataRedactor.Redact(snapshotJson));
 
         foreach (var log in _logger.GetRecentLogFiles(3))
         {
             try
             {
-                File.Copy(log, Path.Combine(work, Path.GetFileName(log)), true);
+                var safeLog = SensitiveDataRedactor.Redact(File.ReadAllText(log));
+                File.WriteAllText(Path.Combine(work, Path.GetFileName(log)), safeLog);
             }
             catch
             {

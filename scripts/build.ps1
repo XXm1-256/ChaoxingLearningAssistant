@@ -12,7 +12,11 @@ $QuickRun = Join-Path $Artifacts 'quick-run'
 $Publish = Join-Path $Artifacts 'publish\win-x64'
 $PortableStage = Join-Path $Artifacts ('portable-stage-' + [Guid]::NewGuid().ToString('N'))
 $ReadyMarker = Join-Path $Artifacts 'QUICK_RUN_READY.txt'
+$FullReadyMarker = Join-Path $Artifacts 'FULL_BUILD_READY.txt'
 if (Test-Path $ReadyMarker) { Remove-Item $ReadyMarker -Force }
+if (Test-Path $FullReadyMarker) { Remove-Item $FullReadyMarker -Force }
+[xml]$ProjectXml = Get-Content -LiteralPath $Project
+$AppVersion = [string]$ProjectXml.Project.PropertyGroup.Version
 Set-Location $Root
 
 function Assert-DotNetSdk {
@@ -81,7 +85,7 @@ if (-not (Test-Path $QuickExe)) {
     throw 'QUICK_RUN_EXE_NOT_FOUND: quick-run publish completed but the EXE was not found.'
 }
 Set-Content -Path (Join-Path $Artifacts 'QUICK_RUN_READY.txt') -Value @(
-    'Version: 1.42.0',
+    "Version: $AppVersion",
     'Quick-run build is ready.',
     'Open: artifacts\quick-run\ChaoxingLearningAssistant.exe',
     'This build requires .NET 8 Desktop Runtime on the computer.'
@@ -121,6 +125,20 @@ Run-DotNet -Name 'Publish self-contained win-x64' -Args @(
     '-p:DebugSymbols=false',
     '-o', $Publish
 )
+
+$PublishedExe = Join-Path $Publish 'ChaoxingLearningAssistant.exe'
+if (-not (Test-Path -LiteralPath $PublishedExe)) {
+    throw 'FULL_BUILD_EXE_NOT_FOUND: self-contained publish completed but the EXE was not found.'
+}
+$PublishedVersion = (Get-Item -LiteralPath $PublishedExe).VersionInfo.FileVersion
+if ($PublishedVersion -notlike "$AppVersion*") {
+    throw "FULL_BUILD_VERSION_MISMATCH: expected $AppVersion, found $PublishedVersion"
+}
+$PublishedHash = (Get-FileHash -LiteralPath $PublishedExe -Algorithm SHA256).Hash.ToLowerInvariant()
+Set-Content -LiteralPath $FullReadyMarker -Value @(
+    "Version: $AppVersion",
+    "ExeSha256: $PublishedHash"
+) -Encoding ASCII
 
 Write-Host ''
 Write-Host '== Portable ZIP =='
