@@ -78,6 +78,36 @@ function evaluate(method, nodes) {
     location: { href: 'https://example.test/course/' }, URL, URLSearchParams,
   }, { timeout: 1000 });
 }
+
+test('speed inheritance only touches the matching player and falls back to normal speed without a control', () => {
+  const video = { src: 'https://example.test/video', playbackRate: 2,
+    parentElement: { querySelectorAll: () => [] } };
+  const code = interpolatedScript('RestorePlaybackRateUsingUiAsync', {
+    invariant: 2, targetDocumentUrl: 'https://example.test/player',
+    targetSource: video.src, targetDomIndex: 0
+  });
+  const context = { document: { querySelectorAll: () => [video] }, location: { href: 'https://example.test/other' } };
+  assert.equal(vm.runInNewContext(code, context), false);
+  assert.equal(video.playbackRate, 2);
+  context.location.href = 'https://example.test/player';
+  assert.equal(vm.runInNewContext(code, context), false);
+  assert.equal(video.playbackRate, 1);
+  assert.equal(video.defaultPlaybackRate, 1);
+});
+
+test('speed inheritance rejects disabled native controls', () => {
+  let clicks = 0;
+  const item = { textContent: '2x', disabled: true,
+    getBoundingClientRect: () => ({width: 80, height: 20}), click: () => clicks++ };
+  const video = { src: 'https://example.test/video', playbackRate: 1,
+    parentElement: { querySelectorAll: selector => selector.startsWith('.vjs-playback-rate select') ? [] : [item] } };
+  const code = interpolatedScript('RestorePlaybackRateUsingUiAsync', {
+    invariant: 2, targetDocumentUrl: 'https://example.test/player', targetSource: video.src, targetDomIndex: 0
+  });
+  vm.runInNewContext(code, { document: { querySelectorAll: () => [video] },
+    location: { href: 'https://example.test/player' }, getComputedStyle: () => ({display:'block',visibility:'visible'}) });
+  assert.equal(clicks, 0);
+});
 function chapter(status) {
   const text = `第一节 视频 ${status}`;
   const container = { innerText: text, className: '', getAttribute: () => '' };

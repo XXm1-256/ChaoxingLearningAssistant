@@ -5,7 +5,7 @@ set "EXE=%~dp0artifacts\quick-run\ChaoxingLearningAssistant.exe"
 set "READY=%~dp0artifacts\QUICK_RUN_READY.txt"
 if not exist "%EXE%" goto :BUILD
 if not exist "%READY%" goto :BUILD
-findstr /x /c:"Version: 1.46.0" "%READY%" >nul
+findstr /x /c:"Version: 1.47.0" "%READY%" >nul
 if errorlevel 1 goto :BUILD
 goto :RUN
 :BUILD

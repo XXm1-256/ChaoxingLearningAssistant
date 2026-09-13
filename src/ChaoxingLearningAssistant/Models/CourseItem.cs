@@ -8,6 +8,20 @@ public sealed class CourseItem : ObservableObject
     private string _title = string.Empty;
     private int _videoCount;
     private int _completedCount;
+    private int? _taskCount;
+    private int _completedTaskCount;
+    public int? TaskCount
+    {
+        get => _taskCount;
+        set { if (SetProperty(ref _taskCount, value)) { RaisePropertyChanged(nameof(TaskProgressPercent)); RaisePropertyChanged(nameof(TaskProgressSummary)); } }
+    }
+    public int CompletedTaskCount
+    {
+        get => _completedTaskCount;
+        set { if (SetProperty(ref _completedTaskCount, value)) { RaisePropertyChanged(nameof(TaskProgressPercent)); RaisePropertyChanged(nameof(TaskProgressSummary)); } }
+    }
+    public double TaskProgressPercent => TaskCount > 0 ? Math.Clamp(CompletedTaskCount * 100.0 / TaskCount.Value, 0, 100) : 0;
+    public string TaskProgressSummary => TaskCount is null ? "任务点进度尚未读取" : $"已完成任务点 {CompletedTaskCount} / {TaskCount}";
     public string Title
     {
         get => _title;

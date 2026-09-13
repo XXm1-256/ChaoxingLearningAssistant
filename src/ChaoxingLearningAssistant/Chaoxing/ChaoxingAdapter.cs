@@ -89,7 +89,7 @@ public sealed class ChaoxingAdapter : IDisposable
     const key = courseId ? `id:${courseId}` : `url:${href}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ title, url: href });
+    out.push({ title, url: href, progressText: normalize(card?.innerText || card?.textContent) });
   }
 
   // Some course-home variants keep course/class ids in the card and use a
@@ -120,7 +120,7 @@ public sealed class ChaoxingAdapter : IDisposable
     const query = new URLSearchParams({ courseId });
     if (classId) query.set('clazzid', classId);
     seen.add(key);
-    out.push({ title, url: `${host}/mycourse/studentcourse?${query}` });
+    out.push({ title, url: `${host}/mycourse/studentcourse?${query}`, progressText: normalize(card.innerText || card.textContent) });
   }
   return out.slice(0, 200);
 })()
@@ -133,7 +133,11 @@ public sealed class ChaoxingAdapter : IDisposable
                         Uri.TryCreate(x.Url, UriKind.Absolute, out _))
             .GroupBy(x => GetCourseIdentity(x.Url), StringComparer.OrdinalIgnoreCase)
             .Select(g => g.OrderBy(x => x.Title.Length).First())
-            .Select(x => new CourseItem { Title = x.Title.Trim(), Url = x.Url })
+            .Select(x => {
+                var progress = TaskPointProgress.Parse(x.ProgressText);
+                return new CourseItem { Title = x.Title.Trim(), Url = x.Url,
+                    TaskCount = progress?.Total, CompletedTaskCount = progress?.Completed ?? 0 };
+            })
             .ToArray();
 
         _logger.Info("CX-COURSE-SCAN", $"课程候选识别数量：{courses.Length}");
@@ -354,6 +358,7 @@ public sealed class ChaoxingAdapter : IDisposable
     const completion = completionState(context);
     out.push({
       title, url: href, chapterId, documentUrl: location.href,
+      progressText: normalize(context?.innerText || context?.textContent),
       isSyntheticUrl: !hasDirectUrl && !!href, isActive: isActive(node) || isActive(context),
       taskType: detect(context), isCompleted: completion === true,
       completionKnown: completion !== null, order: order++
@@ -391,8 +396,11 @@ public sealed class ChaoxingAdapter : IDisposable
         var index = 0;
         foreach (var x in merged)
         {
+            var progress = TaskPointProgress.Parse(x.ProgressText);
             result.Add(new ChapterItem
             {
+                TaskCount = progress?.Total,
+                CompletedTaskCount = progress?.Completed ?? 0,
                 Index = index++,
                 Title = x.Title,
                 Url = x.Url,
@@ -1736,14 +1744,35 @@ public sealed class ChaoxingAdapter : IDisposable
         return results.Any(x => x > 0);
     }
 
-    public async Task<bool> RestorePlaybackRateUsingUiAsync(double rate)
+    public async Task<bool> RestorePlaybackRateUsingUiAsync(double rate, PlayerSnapshot? player = null)
     {
         if (!double.IsFinite(rate) || rate <= 0) return false;
+        player ??= await GetPlayerSnapshotAsync();
+        if (!player.Found || player.DomIndex < 0 || string.IsNullOrWhiteSpace(player.DocumentUrl)) return false;
         rate = Math.Round(rate, 2);
         var invariant = rate.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var targetDocumentUrl = JsonSerializer.Serialize(player.DocumentUrl);
+        var targetSource = JsonSerializer.Serialize(player.Source);
+        var targetDomIndex = player.DomIndex;
         var script = $$"""
 (() => {
+  if (location.href !== {{targetDocumentUrl}}) return false;
+  const video = Array.from(document.querySelectorAll('video'))[{{targetDomIndex}}];
+  if (!video || ({{targetSource}} && (video.currentSrc || video.src) !== {{targetSource}})) return false;
+  const root = video.closest?.('.video-js,.ans-video,.video-container') || video.parentElement;
+  if (!root) return false;
+  const usable = el => {
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return !el.disabled && el.getAttribute?.('aria-disabled') !== 'true' &&
+      r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
+  };
   const target = {{invariant}};
+  const normalSpeed = () => {
+    try { video.defaultPlaybackRate = 1; video.playbackRate = 1; } catch {}
+    return false;
+  };
+  if (target === 1) { normalSpeed(); return video.playbackRate === 1; }
   const labels = [
     String(target) + 'x',
     String(target) + 'X',
@@ -1752,13 +1781,14 @@ public sealed class ChaoxingAdapter : IDisposable
   ];
   const norm = s => (s || '').replace(/\s+/g,'').toLowerCase();
 
-  for (const select of Array.from(document.querySelectorAll('select'))) {
+  for (const select of Array.from(root.querySelectorAll('.vjs-playback-rate select,select[aria-label*="倍速"],select[aria-label*="速度"],select[aria-label*="playback rate" i]'))) {
+    if (!usable(select)) continue;
     for (const option of Array.from(select.options || [])) {
       const txt = norm(option.textContent);
       const val = Number(option.value);
       const textMatch = labels.some(x => txt === norm(x));
       const valueMatch = Number.isFinite(val) && Math.abs(val-target) < 0.001;
-      if (textMatch || valueMatch) {
+      if (!option.disabled && (textMatch || valueMatch)) {
         select.value = option.value;
         select.dispatchEvent(new Event('change', {bubbles:true}));
         return true;
@@ -1766,21 +1796,21 @@ public sealed class ChaoxingAdapter : IDisposable
     }
   }
 
-  const candidates = Array.from(document.querySelectorAll('button,[role="menuitem"],li,span,a'));
+  const candidates = Array.from(root.querySelectorAll('.vjs-playback-rate .vjs-menu-item,[role="menuitemradio"][aria-label*="倍速"],[role="menuitemradio"][aria-label*="speed" i]'));
   for (const el of candidates) {
     const txt = norm(el.textContent);
     if (!labels.some(x => txt === norm(x))) continue;
     const r = el.getBoundingClientRect();
     const style = getComputedStyle(el);
     const visible = r.width > 0 && r.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
-    if (!visible) continue;
+    if (!visible || !usable(el)) continue;
     try { el.click(); return true; } catch {}
   }
 
-  return false;
+  return normalSpeed();
 })()
 """;
-        var results = await ExecuteAcrossDocumentsAsync<bool>(script);
+        var results = await ExecuteAcrossDocumentsAsync<bool>(script, x => x);
         return results.Any(x => x);
     }
 
@@ -1923,12 +1953,14 @@ public sealed class ChaoxingAdapter : IDisposable
 
     private sealed class CourseDto
     {
+        public string ProgressText { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
         public string Url { get; set; } = string.Empty;
     }
 
     private sealed class ChapterDto
     {
+        public string ProgressText { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
         public string Url { get; set; } = string.Empty;
         public string ChapterId { get; set; } = string.Empty;

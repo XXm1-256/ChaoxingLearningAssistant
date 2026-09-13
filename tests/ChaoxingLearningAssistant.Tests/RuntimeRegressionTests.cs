@@ -16,6 +16,31 @@ namespace ChaoxingLearningAssistant.Tests;
 public sealed class RuntimeRegressionTests
 {
     [TestMethod]
+    public void ActualProgressTemplateChangesIndicatorWidth()
+    {
+        RunSta(() =>
+        {
+            using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("AppUiUnderTest.xaml")!;
+            var xml = XDocument.Load(stream);
+            XNamespace wpf = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+            var templateXml = xml.Descendants(wpf + "ControlTemplate")
+                .Single(e => (string?)e.Attribute("TargetType") == "ProgressBar");
+            // Resolve the original template's brush without loading the whole Application.
+            var text = templateXml.ToString().Replace("{StaticResource AccentGradientBrush}", "#00BB99");
+            var bar = new ProgressBar { Width = 200, Height = 8, Maximum = 100,
+                Template = (ControlTemplate)XamlReader.Parse(text), Value = 25 };
+            bar.Measure(new Size(200, 8));
+            bar.Arrange(new Rect(0, 0, 200, 8));
+            bar.UpdateLayout();
+            var indicator = (FrameworkElement)bar.Template.FindName("PART_Indicator", bar);
+            Assert.AreEqual(50.0, indicator.ActualWidth, 0.1);
+            bar.Value = 75;
+            bar.UpdateLayout();
+            Assert.AreEqual(150.0, indicator.ActualWidth, 0.1);
+        });
+    }
+
+    [TestMethod]
     public void RealCourseTemplate_RendersReadOnlyProgress_AndUpdatesCounts()
     {
         // 测试实际发布界面的模板，并触发 WPF 布局，避免 XML 解析通过却运行崩溃。
@@ -29,23 +54,23 @@ public sealed class RuntimeRegressionTests
                 .Single(e => (string?)e.Attribute(x + "Name") == "CourseList")
                 .Descendants(wpf + "DataTemplate").Single();
             var template = (DataTemplate)XamlReader.Parse(templateXml.ToString());
-            var course = new CourseItem { Title = "视频课程", VideoCount = 8, CompletedCount = 3 };
+            var course = new CourseItem { Title = "视频课程", TaskCount = 8, CompletedTaskCount = 3 };
             var presenter = new ContentPresenter { Content = course, ContentTemplate = template };
             presenter.Measure(new Size(360, 500));
             presenter.Arrange(new Rect(0, 0, 360, 500));
             presenter.UpdateLayout();
             var progressSummary = Descendants(presenter).OfType<TextBlock>()
-                .Single(t => BindingOperations.GetBinding(t, TextBlock.TextProperty)?.Path.Path == nameof(CourseItem.ProgressSummary));
+                .Single(t => BindingOperations.GetBinding(t, TextBlock.TextProperty)?.Path.Path == nameof(CourseItem.TaskProgressSummary));
             var progressBar = Descendants(presenter).OfType<ProgressBar>()
-                .Single(b => BindingOperations.GetBinding(b, ProgressBar.ValueProperty)?.Path.Path == nameof(CourseItem.ProgressPercent));
+                .Single(b => BindingOperations.GetBinding(b, ProgressBar.ValueProperty)?.Path.Path == nameof(CourseItem.TaskProgressPercent));
             BindingOperations.GetBindingExpression(progressSummary, TextBlock.TextProperty)!.UpdateTarget();
             BindingOperations.GetBindingExpression(progressBar, ProgressBar.ValueProperty)!.UpdateTarget();
-            Assert.AreEqual("已完成 3 / 8  ·  38%", progressSummary.Text);
+            Assert.AreEqual("已完成任务点 3 / 8", progressSummary.Text);
             Assert.AreEqual(37.5, progressBar.Value, 0.001);
-            course.CompletedCount = 4;
+            course.CompletedTaskCount = 4;
             BindingOperations.GetBindingExpression(progressSummary, TextBlock.TextProperty)!.UpdateTarget();
             BindingOperations.GetBindingExpression(progressBar, ProgressBar.ValueProperty)!.UpdateTarget();
-            Assert.AreEqual("已完成 4 / 8  ·  50%", progressSummary.Text);
+            Assert.AreEqual("已完成任务点 4 / 8", progressSummary.Text);
             Assert.AreEqual(50.0, progressBar.Value, 0.001);
         });
     }

@@ -15,5 +15,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\ChaoxingLearningAssistant\ChaoxingLearningAssistant.csproj" />
     <EmbeddedResource Include="..\..\src\ChaoxingLearningAssistant\Views\MainWindow.xaml" LogicalName="CourseUiUnderTest.xaml" />
+    <EmbeddedResource Include="..\..\src\ChaoxingLearningAssistant\App.xaml" LogicalName="AppUiUnderTest.xaml" />
   </ItemGroup>
 </Project>

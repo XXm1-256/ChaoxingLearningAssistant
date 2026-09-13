@@ -17,6 +17,13 @@ public sealed class MainViewModel : ObservableObject
     private string _playerTimeText = "00:00 / 00:00";
     private string _playbackRateText = "1.0x";
     private double _progressPercent;
+    private bool _videoProgressKnown;
+    public bool VideoProgressKnown
+    {
+        get => _videoProgressKnown;
+        set { if (SetProperty(ref _videoProgressKnown, value)) RaisePropertyChanged(nameof(VideoProgressText)); }
+    }
+    public string VideoProgressText => VideoProgressKnown ? $"{ProgressPercent:F0}%" : "正在读取";
     private bool _canContinueNext;
 
     public ObservableCollection<CourseItem> Courses { get; } = new();
@@ -92,7 +99,7 @@ public sealed class MainViewModel : ObservableObject
     public double ProgressPercent
     {
         get => _progressPercent;
-        set => SetProperty(ref _progressPercent, value);
+        set { if (SetProperty(ref _progressPercent, value)) RaisePropertyChanged(nameof(VideoProgressText)); }
     }
 
     public bool CanContinueNext

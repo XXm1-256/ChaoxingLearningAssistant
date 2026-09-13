@@ -778,6 +778,12 @@ public partial class MainWindow : Window
 
         if (_vm.SelectedCourse is not null)
         {
+            // Never report the currently loaded videos as the course's total task points.
+            if (chapters.Count > 0 && chapters.All(x => x.TaskCount is not null))
+            {
+                _vm.SelectedCourse.TaskCount = chapters.Sum(x => x.TaskCount!.Value);
+                _vm.SelectedCourse.CompletedTaskCount = chapters.Sum(x => x.CompletedTaskCount);
+            }
             var distinctTasks = videoTasks
                 .GroupBy(VideoTaskIdentity, StringComparer.OrdinalIgnoreCase)
                 .Select(g => g.First())
@@ -913,6 +919,7 @@ public partial class MainWindow : Window
                 UpdateCompositeStatus();
                 _vm.PlayerTimeText = "00:00 / 00:00";
                 _vm.ProgressPercent = 0;
+                _vm.VideoProgressKnown = false;
                 _vm.CurrentVideoText = "-";
                 _vm.NextVideoText = "等待视频载入…";
                 SaveSession(snapshot);
@@ -981,6 +988,7 @@ public partial class MainWindow : Window
             _vm.PlayerTimeText = snapshot.TimeText;
             _vm.PlaybackRateText = $"{snapshot.PlaybackRate:0.##}x";
             _vm.ProgressPercent = snapshot.ProgressPercent;
+            _vm.VideoProgressKnown = double.IsFinite(snapshot.Duration) && snapshot.Duration > 0;
             var playerReady = PlayerMediaEvidence.IsReadyForPlayback(snapshot);
             var currentVideoTask = playerReady ? ResolveVideoTaskFromPlayer(snapshot) : null;
             _vm.CurrentVideoText = playerReady
@@ -1270,6 +1278,7 @@ public partial class MainWindow : Window
                 : "学习通已切换到下一视频";
             _vm.PlayerTimeText = candidate.TimeText;
             _vm.ProgressPercent = candidate.ProgressPercent;
+            _vm.VideoProgressKnown = double.IsFinite(candidate.Duration) && candidate.Duration > 0;
             _vm.PlaybackRateText = $"{candidate.PlaybackRate:0.##}x";
             _vm.PlaybackStatusText = playing ? "视频播放中" : "下一视频已打开";
             UpdateCompositeStatus();
@@ -1371,7 +1380,7 @@ public partial class MainWindow : Window
 
     private async Task<(bool Playing, PlayerSnapshot Snapshot)> StartPlaybackWithRetryAsync(
         PlayerSnapshot initial,
-        string sourceLabel)
+        string sourceLabel, bool allowRateInheritance = true)
     {
         if (_adapter is null)
             return (false, initial);
@@ -1381,6 +1390,7 @@ public partial class MainWindow : Window
         var target = initial;
         var current = initial;
         var playSubmitted = false;
+        var rateSubmitted = false;
         var wait = Stopwatch.StartNew();
         for (var attempt = 0; wait.Elapsed < PlayerMediaEvidence.PlaybackWaitTimeout; attempt++)
         {
@@ -1388,11 +1398,12 @@ public partial class MainWindow : Window
                 !IsAutomationOperationCurrent(expectedGeneration))
                 return (false, current);
 
-            if (App.Settings.Current.PreservePlaybackRate &&
+            if (!rateSubmitted && allowRateInheritance && App.Settings.Current.PreservePlaybackRate &&
                 _lastObservedPlaybackRate > 0 &&
                 Math.Abs(_lastObservedPlaybackRate - current.PlaybackRate) > 0.001)
             {
-                await _adapter.RestorePlaybackRateUsingUiAsync(_lastObservedPlaybackRate);
+                rateSubmitted = true;
+                await _adapter.RestorePlaybackRateUsingUiAsync(_lastObservedPlaybackRate, target);
                 if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration)) return (false, current);
             }
 
@@ -1419,6 +1430,15 @@ public partial class MainWindow : Window
             await Task.Delay(300, _lifetimeCts.Token);
         }
 
+        if (allowRateInheritance && (rateSubmitted || current.PlaybackRate > 1) &&
+            IsCurrentPage(pageVersion) && IsAutomationOperationCurrent(expectedGeneration) && !_automationPaused)
+        {
+            await _adapter.RestorePlaybackRateUsingUiAsync(1.0, target);
+            if (!IsCurrentPage(pageVersion) || !IsAutomationOperationCurrent(expectedGeneration) || _automationPaused)
+                return (false, current);
+            App.Logger.Warn("CX-SPEED-FALLBACK", "等待 90 秒未确认播放，尝试正常速度；不再继承倍速。");
+            return await StartPlaybackWithRetryAsync(current, sourceLabel, allowRateInheritance: false);
+        }
         App.Logger.Warn("CX-AUTO-PLAY", $"{sourceLabel}已切换播放器，但等待 90 秒仍未确认播放进度，保留当前目标。 ");
         return (false, current);
     }

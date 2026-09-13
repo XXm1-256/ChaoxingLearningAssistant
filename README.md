@@ -1,3 +1,7 @@
+# v1.47 已发布
+
+修复空进度条，课程显示明确读取到的全部任务点完成数，无法读取时显示未知；倍速继承限定当前播放器并提供正常速度回退。下载及使用说明见 [v1.47 发布页](https://github.com/XXm1-256/ChaoxingLearningAssistant/releases/tag/v1.47)。
+
 # 学习通课程视频播放助手 v1.46
 
 [查看 Windows 便携版下载区](../../releases) · [阅读使用教学](使用教学.md) · [查看常见问题](常见问题与处理方法.md) · [查看构建说明](BUILD.md)
@@ -54,3 +58,4 @@ Windows 10/11 桌面辅助工具。它只在学习通真实页面中读取课程
 普通使用者请在 GitHub Releases 页面确认版本标记为 v1.46 后，下载 `ChaoxingLearningAssistant_v1.46_Windows.zip`。完整解压后先打开最外层教学或常见问题文档，再进入“学习通课程视频播放助手”次级文件夹双击程序。源码构建可运行 `START.bat` 或 `BUILD_V1_46.bat`。
 
 本版已在 Windows 完成编译和自动化测试；真实学习通课程仍需账号环境验收，详见 `KNOWN_LIMITATIONS.md`。
+

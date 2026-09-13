@@ -10,7 +10,7 @@ $ProjectFile = Join-Path $Root 'src\ChaoxingLearningAssistant\ChaoxingLearningAs
 $Stage = Join-Path $Root ('artifacts\github-release-' + [Guid]::NewGuid().ToString('N'))
 $ProgramFolderName = -join @(0x5B66,0x4E60,0x901A,0x8BFE,0x7A0B,0x89C6,0x9891,0x64AD,0x653E,0x52A9,0x624B | ForEach-Object { [char]$_ })
 $Program = Join-Path $Stage $ProgramFolderName
-$Destination = Join-Path $OutputDirectory 'ChaoxingLearningAssistant_v1.46_Windows.zip'
+$Destination = Join-Path $OutputDirectory 'ChaoxingLearningAssistant_v1.47_Windows.zip'
 $TutorialMarkdown = Join-Path $Root '使用教学.md'
 $TutorialDocx = Join-Path $Root '使用教学.docx'
 $TutorialPdf = Join-Path $Root '使用教学.pdf'
@@ -49,6 +49,8 @@ try {
     Copy-Item -LiteralPath $FaqMarkdown -Destination $Stage
     Copy-Item -LiteralPath $FaqDocx -Destination $Stage
     Copy-Item -LiteralPath $FaqPdf -Destination $Stage
+    $UpdateNotes = Join-Path $Stage '本版更新与常见问题.txt'
+    Copy-Item -LiteralPath (Join-Path $Root 'RELEASE_v1.47.md') -Destination $UpdateNotes
     Get-ChildItem -LiteralPath $Publish | Where-Object {
         $_.Name -notin @('Data', 'WebView2', 'Logs', 'Diagnostics', 'portable.flag')
     } | Copy-Item -Destination $Program -Recurse -Force
@@ -63,7 +65,7 @@ try {
     $FaqMarkdownStage = Join-Path $Stage ([System.IO.Path]::GetFileName($FaqMarkdown))
     $FaqDocxStage = Join-Path $Stage ([System.IO.Path]::GetFileName($FaqDocx))
     $FaqPdfStage = Join-Path $Stage ([System.IO.Path]::GetFileName($FaqPdf))
-    Compress-Archive -LiteralPath $TutorialMarkdownStage,$TutorialDocxStage,$TutorialPdfStage,$FaqMarkdownStage,$FaqDocxStage,$FaqPdfStage,$Program -DestinationPath $Destination -CompressionLevel Optimal
+    Compress-Archive -LiteralPath $TutorialMarkdownStage,$TutorialDocxStage,$TutorialPdfStage,$FaqMarkdownStage,$FaqDocxStage,$FaqPdfStage,$UpdateNotes,$Program -DestinationPath $Destination -CompressionLevel Optimal
 }
 finally {
     if (Test-Path -LiteralPath $Stage) {

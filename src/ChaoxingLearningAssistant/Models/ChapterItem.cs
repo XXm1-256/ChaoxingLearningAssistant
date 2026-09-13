@@ -12,6 +12,8 @@ public sealed class ChapterItem
     public TaskType TaskType { get; set; } = TaskType.Unknown;
     public bool IsCompleted { get; set; }
     public bool CompletionKnown { get; set; }
+    public int? TaskCount { get; set; }
+    public int CompletedTaskCount { get; set; }
     public List<VideoTaskItem> VideoTasks { get; set; } = new();
     public int VideoCount => VideoTasks.Count;
     public int CompletedVideoCount => VideoTasks.Count(x => x.CompletionKnown && x.IsCompleted);

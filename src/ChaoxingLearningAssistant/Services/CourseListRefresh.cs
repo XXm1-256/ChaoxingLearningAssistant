@@ -14,6 +14,11 @@ public static class CourseListRefresh
             var fresh = group.First();
             if (!known.TryGetValue(fresh.Url, out var retained)) return fresh;
             retained.Title = fresh.Title;
+            if (fresh.TaskCount is not null)
+            {
+                retained.TaskCount = fresh.TaskCount;
+                retained.CompletedTaskCount = fresh.CompletedTaskCount;
+            }
             // Course-list scans do not carry chapter/player progress. Keep observed counts.
             return retained;
         }).ToArray();
